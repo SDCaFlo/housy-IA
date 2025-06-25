@@ -1,0 +1,25 @@
+# codigo para manejo de clientes de aws.
+import os
+import boto3
+from app.core.config import AWS_REGION
+
+
+def get_boto3_session():
+    """Logica para discernir el entorno y cargar el perfil"""
+    env = os.getenv("ENV", "local")
+    if env == "local":
+        from app.core.config import LOCAL_PROFILE_NAME   
+        return boto3.Session(profile_name=LOCAL_PROFILE_NAME)
+    return boto3.Session()
+
+def get_dynamodb_client():
+    session = get_boto3_session()
+    return session.client("dynamodb", region_name=AWS_REGION)
+
+def get_bedrock_client():
+    session = get_boto3_session()
+    return session.client("bedrock-runtime", region_name=AWS_REGION)
+
+def get_s3_client():
+    session = get_boto3_session()
+    return session.client("s3", region_name=AWS_REGION)
