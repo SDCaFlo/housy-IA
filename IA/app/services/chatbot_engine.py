@@ -1,7 +1,7 @@
 
 from typing import List, Dict
-from app.services.dynamodb_queries import get_latests_messages, write_message, response_to_list
 from app.models.ChatMessage import ChatMessage
+
 
 # funciones como
 # get_response
@@ -9,53 +9,54 @@ from app.models.ChatMessage import ChatMessage
 # create_response
 # user_chat
 
-def build_history_prompt(messages: List[Dict]) -> str:
-    """Creamos un prompt con el historial de mensajes para dar contexto"""
-    history_prompt = ""
+def format_message(message: str, role: str="user"):
+    """Formatea el mensaje del cliente para que devuelva 
+    estructura de mensaje para bedrock"""
+    return {'role': role, 'content': [{'text': message}]}
 
-    if len(messages)>0:
-        for message in messages:
-            role = message['role']
-            text = message['message']
-            history_prompt += f"{role}: {text}\n"
 
-    return history_prompt
+def get_chat_stage(conversation):
+    pass # pending logic for stage definition
+    return 1
 
-def call_model(conversation: list, system_prompt: str) -> str:
-    from botocore.exceptions import ClientError
-    from app.core.config import BEDROCK_MODEL_ID
-    from app.core.aws_clients import get_bedrock_client
-    client = get_bedrock_client()
+def proccess_chat_turn(user_id: str, conv_id:str, message:str):
+    """Logica por stages para el procesamiento de chats"""
+    primary_key = "USER#"+user_id+"#CONV#"+conv_id
+    #1. Get Chat History
+    ''' - recuperamos contexto
+        - anexamos nuevo mensaje
+        - guardamos nuevo mensaje
+    '''
+    from app.core.aws_clients import get_dynamodb_client
+    from app.services.dynamodb_queries import get_latests_messages, response_to_conversation, serialize_message, write_message
 
-    systemPrompt = [
-        {
-            "text": system_prompt
-        }
-    ]
-
-    inference_config = { # all Optional, Invoke parameter names used in this example
-        "maxTokens": 50,  # greater than 0, equal or less than 5k (default: dynamic*)
-        "temperature": 0.7, 
-        "topP": 0.1, 
-        #"topK": int, // 0 or greater (default: 50)
-        #"stopSequences": [string]
-    }
-
-    try:
-        # Send the message to the model, using a basic inference configuration.
-        response = client.converse(
-            system=systemPrompt,
-            modelId=BEDROCK_MODEL_ID,
-            messages=conversation,
-            inferenceConfig=inference_config
-        )
-  
-        response_text = response["output"]["message"]["content"][0]["text"]
-
-    except (ClientError, Exception) as e:
-        error = f"ERROR: Can't invoke '{BEDROCK_MODEL_ID}'. Reason: {e}"
-        return error
+    dynamodb = get_dynamodb_client() # creacion sesion
+    latest_messages = get_latests_messages(dynamodb, primary_key, limit=10)
+    latest_conversation = response_to_conversation(latest_messages)
+    latest_conversation.append(format_message(message)) 
+    # buscar hacer esto ASYNC (para no afectar rendimiento)
+    write_message(dynamodb, "ChatMessages",
+                   serialize_message(message, primary_key, role='user'))
     
-    return response_text
+    #2. Determine Stage
+    chat_stage = get_chat_stage(latest_conversation)
+
+    #3. Enrutar stage
+    match chat_stage:
+        case 1: 
+            from app.services.stages import stage1_extract
+            response = stage1_extract.handle(latest_conversation)
+        case _:
+            response= 'stage no identificado'
+    
+    #4. Guardar respuesta BOT
+    write_message(dynamodb, "ChatMessages",
+                serialize_message(response, primary_key, role='assistant'))
+
+    #5. Retornar respuesta
+    return response
+
+    
 
 
+    
