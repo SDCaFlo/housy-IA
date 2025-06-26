@@ -1,16 +1,16 @@
 # housy-IA
 
-
-Current Status:
+CURRENT STATUS:
 - dynamodb operations: OK
 - chatbot conversation: OK . Stage 1.
 - FAST API endpoints deployed.
+- Dockerfile creation: OK.
 
-Next Steps:
+NEXT STEPS:
 - Add Following Chatbot Stages.
 - Deploy in AWS
 
 
-Future Fixes:
+FUTURE FIXES:
 - Async functions for DynamoDB writing
 - Log implementation
