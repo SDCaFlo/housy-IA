@@ -14,6 +14,14 @@ def format_message(message: str, role: str="user"):
     estructura de mensaje para bedrock"""
     return {'role': role, 'content': [{'text': message}]}
 
+def format_conversation(conversation_history):
+    """Formats the output for chat history recovery"""
+    formatted_history = []
+    for item in conversation_history['Items'][::-1]:
+        text = item['message']['S']
+        role = item['role']['S']
+        formatted_history.append({'role': role, 'message': text})
+    return formatted_history
 
 def get_chat_stage(conversation):
     pass # pending logic for stage definition
