@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 
 class ChatMessage(BaseModel):
@@ -9,3 +9,32 @@ class ChatMessage(BaseModel):
     role: str
     message: str
     metadata: Optional[Dict] = None
+
+class UserMessage(BaseModel):
+    # clase para nuevo mensaje de cliente
+    user_id: str
+    conv_id: str
+    message: str
+    metadata: Optional[Dict] = None
+
+class ChatResponse(BaseModel):
+    # model response in str
+    output: str
+
+class ChatHistoryRequest(BaseModel):
+    """History request structure"""
+    user_id: str
+    conv_id: str
+    limit: int = 10
+    reverse: bool = False
+
+
+class ChatHistoryElement(BaseModel):
+    """Base element for ChatHistoryResponse"""
+    role: str
+    message: str
+
+class ChatHistoryResponse(BaseModel):
+    """History response structure"""
+    history: List[ChatHistoryElement]
+
