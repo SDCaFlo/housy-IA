@@ -20,19 +20,33 @@ cursor = conn.cursor()
 # OpenSearch config
 INDEX_NAME = os.getenv("OPENSEARCH_INDEX", "properties")
 
-# Crear índice si no existe
-if not client.indices.exists(INDEX_NAME):
-    client.indices.create(INDEX_NAME, body={
-        "mappings": {
-            "properties": {
-                "text": {"type": "text"},
-                "embedding": {
-                    "type": "dense_vector",
-                    "dims": 1536  # Ajusta según el modelo Bedrock
+def create_index_if_not_exists():
+    if not client.indices.exists(index=INDEX_NAME):
+        client.indices.create(
+            index=INDEX_NAME,
+            body={
+                "settings": {
+                    "index": {
+                        "knn": True
+                    }
+                },
+                "mappings": {
+                    "properties": {
+                        "text": {"type": "text"},
+                        "embedding": {
+                            "type": "knn_vector",
+                            "dimension": 1536
+                        }
+                    }
                 }
             }
-        }
-    })
+        )
+        print(f"✅ Índice '{INDEX_NAME}' creado en OpenSearch")
+    else:
+        print(f"✅ Índice '{INDEX_NAME}' ya existe en OpenSearch")
+
+# Crear índice si no existe
+create_index_if_not_exists()
 
 # Extraer propiedades desde PostgreSQL
 cursor.execute("""
@@ -57,21 +71,3 @@ print("✅ Propiedades indexadas en OpenSearch")
 
 cursor.close()
 conn.close()
-
-# Extraído de load_embeddings.py:
-def create_index_if_not_exists():
-    if not client.indices.exists(INDEX_NAME):
-        client.indices.create(
-            INDEX_NAME,
-            body={
-                "mappings": {
-                    "properties": {
-                        "text": {"type": "text"},
-                        "embedding": {
-                            "type": "dense_vector",
-                            "dims": 1536
-                        }
-                    }
-                }
-            }
-        )
