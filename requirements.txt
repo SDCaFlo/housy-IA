@@ -1,8 +1,19 @@
-boto3
-botocore
+# Core
 fastapi
+uvicorn[standard]
 pydantic
 python-dotenv
+
+# AWS
+boto3
+botocore
+
+# OpenSearch
+opensearch-py
 requests
+
+# PostgreSQL
+psycopg2-binary
+
+# ORMs (opcional si usas SQLAlchemy)
 SQLAlchemy
-uvicorn

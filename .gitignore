@@ -1,0 +1,17 @@
+# Entornos virtuales
+venv/
+ENV/
+env/
+.venv/
+
+# Archivos de Python compilados
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Config VSCode
+.vscode/
+
+# Archivos de entorno
+.env
+.python-version
