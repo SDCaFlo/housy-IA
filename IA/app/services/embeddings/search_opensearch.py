@@ -1,14 +1,15 @@
-from app.services.embeddings.opensearch_service import client
+from app.core.aws_clients import get_opensearch_client
 from app.services.embeddings.bedrock_service import embed_text
-import os
+from app.core.config import OPENSEARCH_INDEX
 
-INDEX_NAME = os.getenv("OPENSEARCH_INDEX", "properties")
 
 def search_similar_properties(query_text, k=5):
     query_vector = embed_text(query_text)
 
+    client = get_opensearch_client()
+    
     response = client.search(
-        index=INDEX_NAME,
+        index=OPENSEARCH_INDEX,
         body={
             "size": k,
             "query": {

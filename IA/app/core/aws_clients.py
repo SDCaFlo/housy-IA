@@ -12,6 +12,10 @@ def get_boto3_session():
         return boto3.Session(profile_name=LOCAL_PROFILE_NAME)
     return boto3.Session()
 
+def get_embed_client():
+    session = get_boto3_session()
+    return session.client("bedrock-runtime", region_name=AWS_REGION)
+
 def get_dynamodb_client():
     session = get_boto3_session()
     return session.client("dynamodb", region_name=AWS_REGION)
@@ -23,3 +27,27 @@ def get_bedrock_client():
 def get_s3_client():
     session = get_boto3_session()
     return session.client("s3", region_name=AWS_REGION)
+
+def get_opensearch_client():
+    from opensearchpy import OpenSearch, RequestsHttpConnection
+    from requests.auth import HTTPBasicAuth
+    from app.core.config import OPENSEARCH_USER
+    from app.core.config import OPENSEARCH_PASSWORD
+    from app.core.config import OPENSEARCH_HOST
+
+    auth = HTTPBasicAuth(OPENSEARCH_USER, OPENSEARCH_PASSWORD)
+
+    client = OpenSearch(
+        hosts=OPENSEARCH_HOST,
+        http_auth=auth,
+        use_ssl=True,
+        verify_certs=True,
+        connection_class=RequestsHttpConnection
+    )
+    return client
+
+
+
+
+
+
