@@ -1,5 +1,6 @@
 from app.services.embeddings.opensearch_service import client
-from bedrock_service import embed_text
+from .bedrock_service import embed_text
+
 import os
 
 INDEX_NAME = os.getenv("OPENSEARCH_INDEX", "properties")
