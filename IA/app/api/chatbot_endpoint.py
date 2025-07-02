@@ -20,24 +20,6 @@ async def chat_endpoint(payload: UserMessage):
         user_id = payload.user_id
         conv_id = payload.conv_id
 
-        # 1️⃣ Intención de búsqueda
-        if tiene_intencion_busqueda(message):
-            resultados = search_similar_properties(message, k=3)
-
-            if resultados:
-                resultados_ordenados = sorted(resultados, key=lambda x: x['score'], reverse=True)
-
-                texto_recomendacion = "🏡 Estas propiedades podrían interesarte:\n\n"
-                for i, r in enumerate(resultados_ordenados, 1):
-                    texto_recomendacion += (
-                        f"🏠 Propiedad recomendada #{i} (Score: {r['score']:.4f}):\n"
-                        f"{r['text']}\n\n"
-                    )
-                return ChatResponse(output=texto_recomendacion)
-            else:
-                return ChatResponse(output="No encontramos propiedades que coincidan. ¿Querés intentar con otra búsqueda?")
-
-        # 2️⃣ Flujo normal del chatbot
         response = proccess_chat_turn(
             user_id=user_id,
             conv_id=conv_id,

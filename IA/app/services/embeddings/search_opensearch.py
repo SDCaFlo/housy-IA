@@ -6,29 +6,35 @@ import os
 INDEX_NAME = os.getenv("OPENSEARCH_INDEX", "properties")
 
 def search_similar_properties(query_text, k=5):
-    query_vector = embed_text(query_text)
+    try:
+        query_vector = embed_text(query_text)
 
-    response = client.search(
-        index=INDEX_NAME,
-        body={
-            "size": k,
-            "query": {
-                "knn": {
-                    "embedding": {
-                        "vector": query_vector,
-                        "k": k
+        response = client.search(
+            index=INDEX_NAME,
+            body={
+                "size": k,
+                "query": {
+                    "knn": {
+                        "embedding": {
+                            "vector": query_vector,
+                            "k": k
+                        }
                     }
                 }
             }
-        }
-    )
+        )
 
-    results = [
-        {
-            "text": hit["_source"]["text"],
-            "score": hit["_score"]
-        }
-        for hit in response["hits"]["hits"]
-    ]
+        results = [
+            {
+                "id": hit["_source"].get("id", hit["_id"]),
+                "text": hit["_source"].get("text", ""),
+                "score": hit["_score"]
+            }
+            for hit in response["hits"]["hits"]
+        ]
 
-    return results
+        return results
+
+    except Exception as e:
+        print("Error en búsqueda OpenSearch:", e)
+        return []
