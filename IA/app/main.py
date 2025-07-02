@@ -26,6 +26,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# healthcheck
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
 # Incluye la ruta de los archivos  api/routes.py
 app.include_router(router, prefix='/chatbot')
 app.include_router(chat_router, prefix='/chat_history')
