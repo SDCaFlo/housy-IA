@@ -1,13 +1,10 @@
+from app.services.chatbot_engine import proccess_chat_turn
 
-from app.services.embeddings.search_opensearch import search_similar_properties
+user_id = "test123"
+conv_id = "conv123"
+mensaje = "deseo una casa de alquiler en lima cerca de un río con 3 cuartos"
 
-query = "deseo una casa de alquiler en lima cerca de un río con 3 cuartos"
-resultados = search_similar_properties(query)
+respuesta = proccess_chat_turn(user_id, conv_id, mensaje)
 
-print("🔍 Resultados desde OpenSearch:")
-for r in resultados:
-    print(f"ID: {r['id']} - Score: {r['score']:.4f}")
-    print(r['text'])
-    print("-" * 50)
-
-   
+print("🧠 Respuesta del chatbot:\n")
+print(respuesta)
