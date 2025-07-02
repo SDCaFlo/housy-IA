@@ -1,4 +1,3 @@
-
 from datetime import datetime, timezone
 from boto3.dynamodb.types import TypeSerializer
 from app.models.ChatMessage import ChatMessage
@@ -62,13 +61,11 @@ def serialize_item(model: ChatMessage):
     serialized_item = {k: serializer.serialize(v) for k, v in model.model_dump().items()}
     return serialized_item
 
-def serialize_message(message, PK, role, model: str = "unspecified"):
+def serialize_message(message, PK, role, model: str = "unspecified", metadata: dict = None):
     message_dict = message_wrapper(PK, message, role, model)
+    if metadata:
+        message_dict['metadata'] = metadata
     return serialize_item(ChatMessage(**message_dict))
-
-
-
-
 
 ### Aux
 def response_to_conversation(response):
@@ -87,5 +84,3 @@ def get_current_timestamp():
     """Formato utilizado para el timestamp"""
     output = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     return output
-
-

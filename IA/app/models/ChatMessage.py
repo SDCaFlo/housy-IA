@@ -37,4 +37,3 @@ class ChatHistoryElement(BaseModel):
 class ChatHistoryResponse(BaseModel):
     """History response structure"""
     history: List[ChatHistoryElement]
-
