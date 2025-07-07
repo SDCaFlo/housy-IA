@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from app.models.ChatMessage import UserMessage, ChatResponse
 from app.services.chatbot_engine import proccess_chat_turn
-from app.utils.intention_detection import tiene_intencion_busqueda
-from app.services.embeddings.search_opensearch import search_similar_properties
+#from app.utils.intention_detection import tiene_intencion_busqueda
+#from app.services.embeddings.search_opensearch import search_similar_properties
 
 router = APIRouter()
 
@@ -12,6 +12,7 @@ async def chat_endpoint(payload: UserMessage):
         message = payload.message
         user_id = payload.user_id
         conv_id = payload.conv_id
+        metadata = payload.metadata
 
         # 1️⃣ Intención de búsqueda
         # if tiene_intencion_busqueda(message):
@@ -34,7 +35,8 @@ async def chat_endpoint(payload: UserMessage):
         response = proccess_chat_turn(
             user_id=user_id,
             conv_id=conv_id,
-            message=message
+            message=message,
+            metadata=metadata
         )
 
         return ChatResponse(output=response)
