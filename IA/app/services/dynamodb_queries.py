@@ -44,16 +44,13 @@ def write_message(dynamodb, table_name: str, serialized_item):
         Item= serialized_item)
     return None
     
-def message_wrapper(PK:str , message:str , role: str, model):
+def message_wrapper(PK:str , message:str , role: str, metadata: dict):
     """Converts Message into JSON format"""
     format_dict = {'PK': PK,
         'SK': 'TIMESTAMP#'+get_current_timestamp(),
         'message': message,
         'role': role,
-        'metadata': {
-            'model': model,
-            'source': 'test'
-            }
+        'metadata': metadata
         }
     return format_dict
 
@@ -62,8 +59,8 @@ def serialize_item(model: ChatMessage):
     serialized_item = {k: serializer.serialize(v) for k, v in model.model_dump().items()}
     return serialized_item
 
-def serialize_message(message, PK, role, model: str = "unspecified"):
-    message_dict = message_wrapper(PK, message, role, model)
+def serialize_message(message, PK, role, metadata):
+    message_dict = message_wrapper(PK, message, role, metadata)
     return serialize_item(ChatMessage(**message_dict))
 
 

@@ -1,6 +1,8 @@
 
-from typing import List, Dict
-from app.models.ChatMessage import ChatMessage
+from typing import List
+from app.models.ChatMessage import ChatHistoryElement
+from app.core.config import DYNAMODB_TABLE
+from boto3.dynamodb.types import TypeDeserializer
 
 
 # funciones como
@@ -14,20 +16,43 @@ def format_message(message: str, role: str="user"):
     estructura de mensaje para bedrock"""
     return {'role': role, 'content': [{'text': message}]}
 
-def format_conversation(conversation_history):
+def format_conversation(conversation_history, verbose: bool=False):
     """Formats the output for chat history recovery"""
     formatted_history = []
+    if verbose==False:
+        for item in conversation_history['Items'][::-1]:
+            text = item['message']['S']
+            role = item['role']['S']
+            formatted_history.append({'role': role, 'message': text})
+    elif verbose==True:
+        for item in conversation_history['Items'][::-1]:
+            text = item['message']['S']
+            role = item['role']['S']
+            timestamp = item['SK']['S']
+            metadata = item['metadata']['M']
+            formatted_history.append({'role': role, 'message': text, 'timestamp': timestamp, 'metadata': metadata})
+    return formatted_history
+
+
+def format_conversation_2(conversation_history, verbose=False):
+    """Formats the output for chat history recovery
+    version 2: Using deserializer"""
+    formatted_history = []
+    deserializer = TypeDeserializer()
     for item in conversation_history['Items'][::-1]:
-        text = item['message']['S']
-        role = item['role']['S']
-        formatted_history.append({'role': role, 'message': text})
+        deserialized_item =  { k: deserializer.deserialize(v) for k, v in item.items()}
+        if verbose==False:
+            del deserialized_item['metadata']
+            del deserialized_item['SK']
+        formatted_history.append(ChatHistoryElement(**deserialized_item))
+
     return formatted_history
 
 def get_chat_stage(conversation):
     pass # pending logic for stage definition
     return 1
 
-def proccess_chat_turn(user_id: str, conv_id:str, message:str):
+def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {}):
     """Logica por stages para el procesamiento de chats"""
     primary_key = "USER#"+user_id+"#CONV#"+conv_id
     #1. Get Chat History
@@ -43,8 +68,8 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str):
     latest_conversation = response_to_conversation(latest_messages)
     latest_conversation.append(format_message(message)) 
     # buscar hacer esto ASYNC (para no afectar rendimiento)
-    write_message(dynamodb, "ChatMessages",
-                   serialize_message(message, primary_key, role='user'))
+    write_message(dynamodb, DYNAMODB_TABLE,
+                   serialize_message(message, primary_key, role='user', metadata=metadata))
     
     #2. Determine Stage
     chat_stage = get_chat_stage(latest_conversation)
@@ -58,8 +83,8 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str):
             response= 'stage no identificado'
     
     #4. Guardar respuesta BOT
-    write_message(dynamodb, "ChatMessages",
-                serialize_message(response, primary_key, role='assistant'))
+    write_message(dynamodb, DYNAMODB_TABLE,
+                serialize_message(response, primary_key, role='assistant', metadata=metadata))
 
     #5. Retornar respuesta
     return response
