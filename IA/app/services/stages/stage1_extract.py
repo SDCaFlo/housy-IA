@@ -10,9 +10,9 @@ from langchain_core.runnables import RunnableLambda, RunnableBranch
 BASE_PROMPT = "Simula ser un asesor inmobiliario que guía al usuario con preguntas "\
         "para entender qué tipo de propiedad desea el cliente llenando los datos REQUERIDOS."\
         " Sé breve pero cordial y amigable. (máx 50 palabras)." \
-        " Como contexto ten en cuenta los datos que podemos recolectar y su descripción. Ten en cuenta que algunos estan marcados como REQUERIDOS," \
-        "los demás son OPCIONALES: {data_info}"\
         "Actualmente los datos FALTANTES son: {datos_faltantes}"\
+        " Como contexto ten en cuenta los datos que podemos recolectar y su descripción. Ten en cuenta que algunos estan marcados como REQUERIDOS," \
+        "los demás son OPCIONALES: {data_info}"
 
 LEAD_GENERATION_PARAMS = {"max_tokens": 250, "temperature": 0.5, "top_p" : 0.5}
 
