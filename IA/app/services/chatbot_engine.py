@@ -67,15 +67,12 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
     #4. Guardar Mensajes
         # ( pendiente agregar chat_stage al guardar mensaje )
     model_message = get_model_message(chat_stage, response)
-    try:
-        write_message(dynamodb, DYNAMODB_TABLE,
-            serialize_message(message, primary_key, role='user', metadata=metadata)) 
-        write_message(dynamodb, DYNAMODB_TABLE,
-                    serialize_message(model_message, primary_key, role='assistant', metadata=metadata))
-    except Exception as e:
-        print("error found: ")
-        print(e)
-        pass
+
+    write_message(dynamodb, DYNAMODB_TABLE,
+        serialize_message(message, primary_key, role='user', metadata=metadata)) 
+    write_message(dynamodb, DYNAMODB_TABLE,
+        serialize_message(model_message, primary_key, role='assistant', metadata=metadata))
+
 
     #5. Retornar respuesta
     return chat_stage, response
