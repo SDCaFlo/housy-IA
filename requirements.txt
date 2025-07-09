@@ -18,3 +18,7 @@ psycopg2-binary
 
 # ORMs (opcional si usas SQLAlchemy)
 SQLAlchemy
+
+#langchain
+langchain
+langchain-aws

@@ -1,6 +1,6 @@
 
 from datetime import datetime, timezone
-from boto3.dynamodb.types import TypeSerializer
+from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
 from app.models.ChatMessage import ChatMessage
 
 
@@ -85,4 +85,10 @@ def get_current_timestamp():
     output = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     return output
 
-
+def get_metadata(raw_messages):
+    deserializer = TypeDeserializer()
+    metadata_list = []
+    for item in raw_messages['Items'][::-1]:
+        deserialized_item =  { k: deserializer.deserialize(v) for k, v in item.items()}
+        metadata_list.append(deserialized_item['metadata'])
+    return metadata_list

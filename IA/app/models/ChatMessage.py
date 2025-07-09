@@ -15,6 +15,7 @@ class UserMessage(BaseModel):
     user_id: str
     conv_id: str
     message: str
+    verbose: bool = False
     metadata: Optional[Dict] = None
 
 class ChatResponse(BaseModel):

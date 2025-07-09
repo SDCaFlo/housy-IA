@@ -3,12 +3,12 @@ from app.core.config import DYNAMODB_TABLE
 from boto3.dynamodb.types import TypeDeserializer
 
 
-def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {}):
+def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {}, verbose:bool = False):
     """Logica por stages para el procesamiento de chats"""
 
     from app.core.aws_clients import get_dynamodb_client
-    from app.services.dynamodb_queries import get_latests_messages, response_to_conversation, serialize_message, write_message
-
+    from app.services.dynamodb_queries import get_latests_messages, response_to_conversation, serialize_message, write_message, get_metadata
+    from app.services.stages.stage_logic import get_model_message
 
     primary_key = "USER#"+user_id+"#CONV#"+conv_id
 
@@ -25,31 +25,57 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
 
     
     #2. Determine Stage
-    #chat_stage = get_chat_stage_metadata(latest_messages)
-    chat_stage = "extract" # forzamos para pruebas
-    
+    try:
+        chat_stage = get_metadata(latest_messages)[-1]['stage'] # obtiene el ultimo stage del historial de conversacion
+    except:
+        chat_stage = "extract"      # si no es posible, asumir extract stage
+
     #3. Route stage
     match chat_stage:
         case "extract": 
-            from app.services.stages import stage1_extract
-            response = stage1_extract.handle(latest_conversation)
-            if "model_response" in response.keys():
-                model_message = response["model_response"]
-            else:
-                model_message = "next stage!"
-        case "recommend":
-            from app.services.stages import stage2_recommend
-            response = stage2_recommend.handle(latest_conversation)
+            from app.services.stages.stage1_extract import handle as stage1_handler
 
-        #update stage pendiente
-    #chat_stage = pass
+            response = stage1_handler(latest_conversation)
+ 
+            lead = response["lead"]             # recuperamos el lead
+
+            if response["next_stage"] == True:
+                from app.services.stages.stage2_recommend import handler as stage2_handler
+                chat_stage = "recommend"        # cambiamos el chat_stage si amerita.
+                response = stage2_handler(lead) # ejecutamos el siguiente stage directamente y asociamos su respuesta
+            
+        case "recommend":
+            from app.services.stages.stage2_recommend import handler as stage2_handler
+            lead = {
+                "ubicacion": "Lima, Perú, San Isidro",
+                "tipo_propiedad": "departamento",
+                "transaccion": "alquiler",
+                "presupuesto": None,
+                "numero_dormitorios": 2,
+                "numero_banos": 2,
+                "metraje_minimo": None,
+                "amenidades": ["gimnasio"],
+                "cercania": None,
+                "pet_friendly": True
+            }
+            response = stage2_handler(lead)
+    
+    #metadata modification:
+    metadata["stage"] = chat_stage
+    metadata["lead"] = lead
     
     #4. Guardar Mensajes
         # ( pendiente agregar chat_stage al guardar mensaje )
-    write_message(dynamodb, DYNAMODB_TABLE,
-        serialize_message(message, primary_key, role='user', metadata=metadata)) 
-    write_message(dynamodb, DYNAMODB_TABLE,
-                serialize_message(model_message, primary_key, role='assistant', metadata=metadata))
+    model_message = get_model_message(chat_stage, response)
+    try:
+        write_message(dynamodb, DYNAMODB_TABLE,
+            serialize_message(message, primary_key, role='user', metadata=metadata)) 
+        write_message(dynamodb, DYNAMODB_TABLE,
+                    serialize_message(model_message, primary_key, role='assistant', metadata=metadata))
+    except Exception as e:
+        print("error found: ")
+        print(e)
+        pass
 
     #5. Retornar respuesta
     return chat_stage, response
