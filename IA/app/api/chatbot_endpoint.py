@@ -12,6 +12,7 @@ async def chat_endpoint(payload: UserMessage):
         message = payload.message
         user_id = payload.user_id
         conv_id = payload.conv_id
+        verbose = payload.verbose
         metadata = payload.metadata
 
         # 1️⃣ Intención de búsqueda
@@ -32,14 +33,15 @@ async def chat_endpoint(payload: UserMessage):
         #         return ChatResponse(output="No encontramos propiedades que coincidan. ¿Querés intentar con otra búsqueda?")
 
         # 2️⃣ Flujo normal del chatbot
-        response = proccess_chat_turn(
+        stage, response = proccess_chat_turn(
             user_id=user_id,
             conv_id=conv_id,
             message=message,
-            metadata=metadata
+            metadata=metadata,
+            verbose=verbose
         )
 
-        return ChatResponse(output=response)
+        return ChatResponse(stage=stage, response=response)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
