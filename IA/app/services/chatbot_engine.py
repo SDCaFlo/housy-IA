@@ -1,8 +1,14 @@
 from typing import List, Dict
 from app.services.stages import stage1_extract, stage2_recommendation
 from app.models.ChatMessage import ChatMessage
-from app.services.embeddings.search_opensearch import search_similar_properties
+from app.services.embeddings.search_opensearch import (
+    search_similar_properties,
+    hay_propiedades_en_ciudad
+)
 from app.utils.intention_detection import tiene_intencion_busqueda
+# Ya NO importar extract_city_chain que usaba langchain
+# En lugar de eso usaremos llamada directa a call_model para extraer ciudad
+from app.services.llm_contact import call_model  # nueva función para llamar Bedrock
 
 
 def format_message(message: str, role: str = "user"):
@@ -23,7 +29,6 @@ def format_conversation(conversation_history):
     return formatted_history
 
 
-# ✅ Mejora para stage con validación segura
 def get_chat_stage_metadata(latest_messages):
     for msg in reversed(latest_messages):
         try:
@@ -35,18 +40,14 @@ def get_chat_stage_metadata(latest_messages):
     return 1
 
 
-def build_recommendation_response(resultados_ordenados):
-    texto_recomendacion = "🏡 Estas propiedades podrían interesarte:\n\n"
-    ids = []
-
-    for i, r in enumerate(resultados_ordenados, 1):
-        texto_recomendacion += (
-            f"🏠 Propiedad recomendada #{i} (ID: {r['id']}, Score: {r['score']:.4f}):\n"
-            f"{r['text']}\n\n"
-        )
-        ids.append(r["id"])
-
-    return texto_recomendacion, ids
+def extract_city_from_message(message: str) -> str:
+    """
+    Llama a call_model con un prompt para extraer la ciudad desde el texto del usuario.
+    """
+    system_prompt = "Extrae el nombre de la ciudad del siguiente texto. Devuelve solo el nombre de la ciudad."
+    history = [{"role": "user", "content": [{"text": message}]}]
+    city = call_model(history, system_prompt)
+    return city.strip().lower()
 
 
 def proccess_chat_turn(user_id: str, conv_id: str, message: str):
@@ -70,61 +71,87 @@ def proccess_chat_turn(user_id: str, conv_id: str, message: str):
 
     chat_stage = get_chat_stage_metadata(latest_messages)
 
-    # STAGE 1: Extracción o intención no clara
     if chat_stage == 1:
         if tiene_intencion_busqueda(message):
-            resultados = search_similar_properties(message, k=3)
-            resultados_ordenados = sorted(resultados, key=lambda x: x["score"], reverse=True)
-            msg, ids = build_recommendation_response(resultados_ordenados)
+            ciudad = extract_city_from_message(message)
 
+            if not hay_propiedades_en_ciudad(ciudad):
+                msg = f"Lo siento, no tenemos propiedades en '{ciudad.title()}'. ¿Quieres buscar en otra zona?"
+                write_message(dynamodb, "ChatMessages",
+                              serialize_message(msg, primary_key, role='assistant', metadata={"stage": 1}))
+                return {
+                    "stage": "stage_1_no_results",
+                    "data": {"message": msg}
+                }
+
+            resultados = search_similar_properties(message, ciudad=ciudad, k=3)
+            resultados_ordenados = sorted(resultados, key=lambda x: x["score"], reverse=True)
+
+            texto_recomendacion = "🏡 Estas propiedades podrían interesarte:\n\n"
+            ids = []
+            for i, r in enumerate(resultados_ordenados, 1):
+                texto_recomendacion += (
+                    f"🏠 Propiedad recomendada #{i} (ID: {r['id']}, Score: {r['score']:.4f}):\n{r['text']}\n\n"
+                )
+                ids.append(r["id"])
+
+            msg = texto_recomendacion
             write_message(dynamodb, "ChatMessages",
-                          serialize_message(msg, primary_key, role='assistant', metadata={"stage": 2}))
+                          serialize_message(msg, primary_key, role='assistant', metadata={"stage": 2, "ciudad": ciudad}))
 
             return {
                 "stage": "stage_2_recommendation",
-                "data": {
-                    "message": msg,
-                    "ids": ids
-                }
+                "data": {"message": msg, "ids": ids}
             }
 
-        # Si no tiene intención todavía, extraer más info
+        # Si no tiene intención clara, seguir preguntando
         response = stage1_extract.handle(latest_conversation)
         write_message(dynamodb, "ChatMessages",
                       serialize_message(response, primary_key, role='assistant', metadata={"stage": 1}))
 
         return {
             "stage": "stage_1_extract",
-            "data": {
-                "message": response
-            }
+            "data": {"message": response}
         }
 
-    # STAGE 2: Ya tiene intención → buscar y recomendar
     elif chat_stage == 2:
-        resultados = search_similar_properties(message, k=3)
-        resultados_ordenados = sorted(resultados, key=lambda x: x["score"], reverse=True)
-        msg, ids = build_recommendation_response(resultados_ordenados)
+        ciudad = extract_city_from_message(message)
 
+        if not hay_propiedades_en_ciudad(ciudad):
+            msg = f"No tenemos propiedades en '{ciudad.title()}'. ¿Quieres buscar en otra zona?"
+            write_message(dynamodb, "ChatMessages",
+                          serialize_message(msg, primary_key, role='assistant', metadata={"stage": 2}))
+            return {
+                "stage": "stage_2_no_results",
+                "data": {"message": msg}
+            }
+
+        resultados = search_similar_properties(message, ciudad=ciudad, k=3)
+        resultados_ordenados = sorted(resultados, key=lambda x: x["score"], reverse=True)
+
+        texto_recomendacion = "🏡 Estas propiedades podrían interesarte:\n\n"
+        ids = []
+        for i, r in enumerate(resultados_ordenados, 1):
+            texto_recomendacion += (
+                f"🏠 Propiedad recomendada #{i} (ID: {r['id']}, Score: {r['score']:.4f}):\n{r['text']}\n\n"
+            )
+            ids.append(r["id"])
+
+        msg = texto_recomendacion
         write_message(dynamodb, "ChatMessages",
-                      serialize_message(msg, primary_key, role='assistant', metadata={"stage": 2}))
+                      serialize_message(msg, primary_key, role='assistant', metadata={"stage": 2, "ciudad": ciudad}))
 
         return {
             "stage": "stage_2_recommendation",
-            "data": {
-                "message": msg,
-                "ids": ids
-            }
+            "data": {"message": msg, "ids": ids}
         }
 
-    # Fallback: reiniciar conversación si no se reconoce el stage
+    # Fallback reinicio de conversación
     response = "Gracias por tu interés. ¿Te gustaría comenzar una nueva búsqueda?"
     write_message(dynamodb, "ChatMessages",
                   serialize_message(response, primary_key, role='assistant', metadata={"stage": 1}))
 
     return {
         "stage": "reset",
-        "data": {
-            "message": response
-        }
+        "data": {"message": response}
     }
