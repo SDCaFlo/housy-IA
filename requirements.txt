@@ -4,6 +4,8 @@ uvicorn[standard]
 pydantic
 python-dotenv
 
+starlette #para CORS
+
 # AWS
 boto3
 botocore
@@ -17,9 +19,8 @@ psycopg2-binary
 
 # ORMs (opcional si usas SQLAlchemy)
 SQLAlchemy
-<<<<<<< Updated upstream
-uvicorn
-langchain>=0.1.0
-langchain-core>=0.1.0
-=======
->>>>>>> Stashed changes
+
+#langchain
+langchain
+langchain-aws
+

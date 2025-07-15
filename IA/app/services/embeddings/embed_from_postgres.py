@@ -50,11 +50,13 @@ def create_index_if_not_exists():
     else:
         logging.info(f"✅ Índice '{INDEX_NAME}' ya existe en OpenSearch")
 
+
 # Crear índice si no existe
 create_index_if_not_exists()
 
 # Extraer propiedades desde PostgreSQL
 cursor.execute("""
+
 SELECT title, description, property_type, address, ST_AsText(geolocation), operation_type
 FROM properties
 """)
@@ -104,3 +106,4 @@ logging.info(f"✅ Se indexaron {success} documentos correctamente.")
 
 cursor.close()
 conn.close()
+

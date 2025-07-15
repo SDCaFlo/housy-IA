@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from boto3.dynamodb.types import TypeSerializer
+from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
 from app.models.ChatMessage import ChatMessage
 
 ### Return messages from Dynamodb ###
@@ -42,16 +42,13 @@ def write_message(dynamodb, table_name: str, serialized_item):
         Item= serialized_item)
     return None
     
-def message_wrapper(PK:str , message:str , role: str, model):
+def message_wrapper(PK:str , message:str , role: str, metadata: dict):
     """Converts Message into JSON format"""
     format_dict = {'PK': PK,
         'SK': 'TIMESTAMP#'+get_current_timestamp(),
         'message': message,
         'role': role,
-        'metadata': {
-            'model': model,
-            'source': 'test'
-            }
+        'metadata': metadata
         }
     return format_dict
 
@@ -60,14 +57,10 @@ def serialize_item(model: ChatMessage):
     serialized_item = {k: serializer.serialize(v) for k, v in model.model_dump().items()}
     return serialized_item
 
-def serialize_message(message, PK, role, model: str = "unspecified", metadata: dict = None):
-    base_metadata = {
-        'model': model,
-        'source': 'test'
-    }
-    if metadata:
-        base_metadata.update(metadata)
 
+def serialize_message(message, PK, role, metadata):
+    message_dict = message_wrapper(PK, message, role, metadata)
+    return serialize_item(ChatMessage(**message_dict))
     message_dict = message_wrapper(PK, message, role, model)
     message_dict['metadata'] = base_metadata
 
@@ -93,3 +86,11 @@ def get_current_timestamp():
     """Formato utilizado para el timestamp"""
     output = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
     return output
+
+def get_metadata(raw_messages):
+    deserializer = TypeDeserializer()
+    metadata_list = []
+    for item in raw_messages['Items'][::-1]:
+        deserialized_item =  { k: deserializer.deserialize(v) for k, v in item.items()}
+        metadata_list.append(deserialized_item['metadata'])
+    return metadata_list

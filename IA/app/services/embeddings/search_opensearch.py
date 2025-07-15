@@ -1,9 +1,3 @@
-<<<<<<< Updated upstream
-# IA/app/services/embeddings/search_opensearch.py
-=======
-from app.services.embeddings.opensearch_service import client
-from app.services.embeddings.bedrock_service import embed_text
->>>>>>> Stashed changes
 import os
 import logging
 from app.services.embeddings.opensearch_service import client as opensearch_client
@@ -44,7 +38,7 @@ def search_similar_properties(query: str, ciudad: str, k: int = 3) -> list[dict]
         logging.error(f"Error en OpenSearch search: {e}")
         return []
 
-<<<<<<< Updated upstream
+
 def hay_propiedades_en_ciudad(ciudad: str) -> bool:
     """
     Verifica si hay al menos 1 propiedad en la ciudad.
@@ -56,8 +50,4 @@ def hay_propiedades_en_ciudad(ciudad: str) -> bool:
     except Exception as e:
         logging.error(f"Error en OpenSearch hay_propiedades: {e}")
         return False
-=======
-    print("DEBUG: Resultados de búsqueda crudos:", results)  # <-- aquí
 
-    return results
->>>>>>> Stashed changes
