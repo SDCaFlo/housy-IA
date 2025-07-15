@@ -1,6 +1,7 @@
 # Entornos virtuales
 venv/
 .venv/
+ia-env
 
 # Python
 __pycache__/
@@ -17,7 +18,17 @@ __pycache__/
 *.csv
 *.json
 *.env
+*.dev
+.docker*
 
 # Otros
 .idea/
 .vscode/
+dockerfile.lambda
+
+#data-gen-files
+*/data-gen/*
+.gitignore copy
+
+# tests
+test-lab
