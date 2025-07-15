@@ -4,14 +4,22 @@ from app.services.chatbot_engine import proccess_chat_turn
 #from app.utils.intention_detection import tiene_intencion_busqueda
 #from app.services.embeddings.search_opensearch import search_similar_properties
 
+
 router = APIRouter()
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat")
 async def chat_endpoint(payload: UserMessage):
+    """
+    Endpoint principal del chatbot.
+
+    Recibe un mensaje del usuario, procesa la conversación y retorna la respuesta del asistente,
+    junto con los IDs de las propiedades recomendadas si existen.
+    """
     try:
         message = payload.message
         user_id = payload.user_id
         conv_id = payload.conv_id
+
         verbose = payload.verbose
         metadata = payload.metadata
 
@@ -45,3 +53,4 @@ async def chat_endpoint(payload: UserMessage):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+

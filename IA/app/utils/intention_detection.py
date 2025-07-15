@@ -14,3 +14,4 @@ def tiene_intencion_busqueda(texto: str) -> bool:
     ]
     texto = texto.lower()
     return any(palabra in texto for palabra in palabras_clave)
+

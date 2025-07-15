@@ -73,7 +73,6 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
     write_message(dynamodb, DYNAMODB_TABLE,
         serialize_message(model_message, primary_key, role='assistant', metadata=metadata))
 
-
     #5. Retornar respuesta
     return chat_stage, response
 
@@ -117,9 +116,3 @@ def format_conversation_2(conversation_history, verbose=False):
         formatted_history.append(ChatHistoryElement(**deserialized_item))
 
     return formatted_history
-
-
-
-
-    
-    

@@ -48,4 +48,3 @@ class ChatHistoryResponse(BaseModel):
 
     class Config:
         exclude_none = True
-

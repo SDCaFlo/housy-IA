@@ -1,41 +1,34 @@
-from botocore.exceptions import ClientError
-from app.core.config import BEDROCK_MODEL_ID
-from app.core.aws_clients import get_bedrock_client
+# IA/app/services/llm_contact.py
 
-def call_model(conversation: list, system_prompt: str) -> str:
+import boto3
+import json
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+client = boto3.client(
+    service_name="bedrock-runtime",
+    region_name=os.getenv("AWS_REGION", "us-east-1"),
+)
+
+def call_model(messages, system_prompt=None):
     """
-    Calls the model and gets a response.
+    messages: lista de {"role": "user"|"assistant", "content": str}
+    system_prompt: lista de {"text": str}
     """
+    payload = {"messages": messages}
+    if system_prompt:
+        payload["system"] = system_prompt  # ahora cada item debe tener "text"
 
-    client = get_bedrock_client()
+    print("🔧 Payload Bedrock:", json.dumps(payload, indent=2))
 
-    systemPrompt = [
-        {
-            "text": system_prompt
-        }
-    ]
+    response = client.invoke_model(
+        modelId=os.getenv("BEDROCK_MODEL_ID"),
+        body=json.dumps(payload),
+        contentType="application/json",
+        accept="application/json"
+    )
 
-    inference_config = { # all Optional, Invoke parameter names used in this example
-        "maxTokens": 250,  # greater than 0, equal or less than 5k (default: dynamic*)
-        "temperature": 0.7, 
-        "topP": 0.1, 
-        #"topK": int, // 0 or greater (default: 50)
-        #"stopSequences": [string]
-    }
-
-    try:
-        # Send the message to the model, using a basic inference configuration.
-        response = client.converse(
-            system=systemPrompt,
-            modelId=BEDROCK_MODEL_ID,
-            messages=conversation,
-            inferenceConfig=inference_config
-        )
-  
-        response_text = response["output"]["message"]["content"][0]["text"]
-
-    except (ClientError, Exception) as e:
-        error = f"ERROR: Can't invoke '{BEDROCK_MODEL_ID}'. Reason: {e}"
-        return error
-    
-    return response_text
+    body = json.loads(response["body"].read())
+    return body["content"][0]["text"]

@@ -1,8 +1,6 @@
-
 from datetime import datetime, timezone
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
 from app.models.ChatMessage import ChatMessage
-
 
 ### Return messages from Dynamodb ###
 
@@ -30,7 +28,7 @@ def get_latests_messages(dynamodb , primary_key: str, limit: int = 2):
         ExpressionAttributeValues = {
             ':pk_val' : {'S' : primary_key}
             },
-        ScanIndexForward=False,  # orden ascendente
+        ScanIndexForward=False,  # orden descendente
         Limit=limit
         )   
     return response
@@ -59,13 +57,14 @@ def serialize_item(model: ChatMessage):
     serialized_item = {k: serializer.serialize(v) for k, v in model.model_dump().items()}
     return serialized_item
 
+
 def serialize_message(message, PK, role, metadata):
     message_dict = message_wrapper(PK, message, role, metadata)
     return serialize_item(ChatMessage(**message_dict))
+    message_dict = message_wrapper(PK, message, role, model)
+    message_dict['metadata'] = base_metadata
 
-
-
-
+    return serialize_item(ChatMessage(**message_dict))
 
 ### Aux
 def response_to_conversation(response):
@@ -76,6 +75,9 @@ def response_to_conversation(response):
             'role': item['role']['S'],
             'content': [{"text": item['message']['S']}]
         }
+        # Metadata opcional para debug o futuro uso
+        if 'metadata' in item:
+            message_entry['metadata'] = {k: v.get('S', None) or v.get('N', None) for k, v in item['metadata']['M'].items()}
         message_log.append(message_entry)
     return message_log
 

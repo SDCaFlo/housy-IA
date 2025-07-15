@@ -30,6 +30,7 @@ LEAD_GENERATION_PARAMS = {"max_tokens": 250, "temperature": 0.7  , "top_p" : 0.7
 
 
 def handle(conversation):
+
     """Logica langchain del chatbot stage - 1"""
 
     # Wrap de funciones en cadenas Langchain:
@@ -224,3 +225,4 @@ def get_langchain_bedrock_client(max_tokens: int = 250, temperature: float = 0.6
         top_p=top_p
         )
     return chat
+

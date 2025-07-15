@@ -3,6 +3,7 @@ fastapi
 uvicorn[standard]
 pydantic
 python-dotenv
+
 starlette #para CORS
 
 # AWS
@@ -22,3 +23,4 @@ SQLAlchemy
 #langchain
 langchain
 langchain-aws
+
