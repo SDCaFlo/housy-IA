@@ -151,7 +151,15 @@ def proccess_chat_turn(user_id: str, conv_id: str, message: str):
     write_message(dynamodb, "ChatMessages",
                   serialize_message(response, primary_key, role='assistant', metadata={"stage": 1}))
 
+<<<<<<< Updated upstream
     return {
         "stage": "reset",
         "data": {"message": response}
     }
+=======
+    #5. Retornar respuesta
+    return response
+
+    
+    
+>>>>>>> Stashed changes
