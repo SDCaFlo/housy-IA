@@ -31,7 +31,14 @@ LEAD_GENERATION_PARAMS = {"max_tokens": 250, "temperature": 0.7  , "top_p" : 0.7
 
 def handle(conversation):
 
-    """Logica langchain del chatbot stage - 1"""
+    """Logica langchain del chatbot stage - 1
+    Ejemplo de conversación:
+    [{'role': 'user',
+        'content': [{"text": "Hello"}]},
+       {'role': 'assistant',
+        'content': [{"text": "Hola, en que puedo ayudarte?"}]}, 
+    ]
+    """
 
     # Wrap de funciones en cadenas Langchain:
     build_prompt_chain = RunnableLambda(lambda vars: build_question_prompt(

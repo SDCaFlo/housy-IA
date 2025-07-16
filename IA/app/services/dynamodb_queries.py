@@ -1,14 +1,14 @@
 from datetime import datetime, timezone
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
-from app.models.ChatMessage import ChatMessage
-
+from app.models.ChatMessage import ChatMessage, ChatHistoryElement, ChatHistoryResponse
+from app.core.aws_clients import get_dynamodb_client
 ### Return messages from Dynamodb ###
 
-def get_all_messages(dynamodb , primary_key: str):
+def get_all_messages(primary_key: str):
     "Funcion para retornar todos los mensajes, brindando un primary Key."
     "Se debe pasar la session o cliente como el parámetro 'dynamodb'"
 
-    response = dynamodb.query(
+    response = get_dynamodb_client().query(
         TableName = 'ChatMessages',
         KeyConditionExpression = 'PK = :pk_val',
         ExpressionAttributeValues = {
@@ -18,17 +18,18 @@ def get_all_messages(dynamodb , primary_key: str):
         )
     return response
 
-def get_latests_messages(dynamodb , primary_key: str, limit: int = 2):
+def get_latests_messages(primary_key: str, limit: int = 2):
     "Funcion para retornar todos los ultimos 10 mensajes, brindando un primary Key."
     "Se debe pasar la session o cliente como el parámetro 'dynamodb'"
 
-    response = dynamodb.query(
+
+    response = get_dynamodb_client().query(
         TableName = 'ChatMessages',
         KeyConditionExpression = 'PK = :pk_val',
         ExpressionAttributeValues = {
             ':pk_val' : {'S' : primary_key}
             },
-        ScanIndexForward=False,  # orden descendente
+        ScanIndexForward=True,  # orden descendente
         Limit=limit
         )   
     return response
@@ -36,8 +37,8 @@ def get_latests_messages(dynamodb , primary_key: str, limit: int = 2):
 
 ### Writing Data to Dynamodb
 
-def write_message(dynamodb, table_name: str, serialized_item):
-    dynamodb.put_item(
+def write_message(table_name: str, serialized_item):
+    get_dynamodb_client().put_item(
         TableName = table_name,
         Item= serialized_item)
     return None
@@ -52,34 +53,42 @@ def message_wrapper(PK:str , message:str , role: str, metadata: dict):
         }
     return format_dict
 
+def message_wrapper_flex(message_dict: dict):
+    """Funcion de empaquetado flexible"""
+    return {
+        **message_dict,
+        'SK': 'TIMESTAMP#'+get_current_timestamp()
+    }
+
+
+
 def serialize_item(model: ChatMessage):
+    from decimal import Decimal
+
+    def convert_floats_to_decimal(obj):
+        if isinstance(obj, float):
+            return Decimal(str(obj))  # Nunca uses Decimal(float), siempre convierte a str primero
+        elif isinstance(obj, list):
+            return [convert_floats_to_decimal(item) for item in obj]
+        elif isinstance(obj, dict):
+            return {k: convert_floats_to_decimal(v) for k, v in obj.items()}
+        else:
+            return obj
+    
+    raw_dict = model.model_dump()
+    clean_dict = convert_floats_to_decimal(raw_dict)
+        
     serializer = TypeSerializer()
-    serialized_item = {k: serializer.serialize(v) for k, v in model.model_dump().items()}
+    serialized_item = {k: serializer.serialize(v) for k, v in clean_dict.items()}
     return serialized_item
 
 
 def serialize_message(message, PK, role, metadata):
     message_dict = message_wrapper(PK, message, role, metadata)
     return serialize_item(ChatMessage(**message_dict))
-    message_dict = message_wrapper(PK, message, role, model)
-    message_dict['metadata'] = base_metadata
-
-    return serialize_item(ChatMessage(**message_dict))
 
 ### Aux
-def response_to_conversation(response):
-    """Convierte los mensajes en una conversación bedrock"""
-    message_log = []
-    for item in response['Items'][::-1]:
-        message_entry = {
-            'role': item['role']['S'],
-            'content': [{"text": item['message']['S']}]
-        }
-        # Metadata opcional para debug o futuro uso
-        if 'metadata' in item:
-            message_entry['metadata'] = {k: v.get('S', None) or v.get('N', None) for k, v in item['metadata']['M'].items()}
-        message_log.append(message_entry)
-    return message_log
+
 
 
 def get_current_timestamp():
@@ -94,3 +103,24 @@ def get_metadata(raw_messages):
         deserialized_item =  { k: deserializer.deserialize(v) for k, v in item.items()}
         metadata_list.append(deserialized_item['metadata'])
     return metadata_list
+
+def deserialize_item(dynamo_object: dict) -> dict:
+    """Deserializador de items en formato diccionario / JSON"""
+    deserializer = TypeDeserializer()
+    return {
+        k: deserializer.deserialize(v) 
+        for k, v in dynamo_object.items()
+    }
+
+
+def format_messages(raw_conversation, verbose: bool):
+    """Formats message for output in history endpoint"""
+    message_list = []
+    for raw_item in raw_conversation.get('Items'):
+        item = deserialize_item(raw_item)
+        if verbose == False:
+            item.pop('SK')
+            item.pop('metadata')
+        message_list.append(ChatHistoryElement(**item))
+    
+    return message_list
