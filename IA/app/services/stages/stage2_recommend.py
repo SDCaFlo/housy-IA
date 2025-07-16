@@ -9,7 +9,14 @@ def handler(lead: PropertyLead)->list:
 
 
 def create_lead_description(lead: PropertyLead) -> str:
-    """Creación de lead description con las palabras de un diccionario"""
+    """Creación de lead description con las palabras de un diccionario
+    Ejemplo lead:
+    property_lead = PropertyLead(
+        ubicacion='Lima, Los Olivos',
+        tipo_propiedad=['departamento'],
+        transaccion='alquiler'
+    )
+    """
     lead = dict(lead)
     lead_description_list = []
     for key, value in lead.items():

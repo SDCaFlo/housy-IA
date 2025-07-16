@@ -1,14 +1,11 @@
-from app.models.ChatMessage import ChatHistoryElement
+from app.models.ChatMessage import ChatHistoryElement, ChatMessage
 from app.core.config import DYNAMODB_TABLE
 from boto3.dynamodb.types import TypeDeserializer
-
+from app.services.dynamodb_queries import get_latests_messages, get_metadata,deserialize_item
+from app.services.dynamodb_queries import message_wrapper_flex, serialize_item, write_message
 
 def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {}, verbose:bool = False):
     """Logica por stages para el procesamiento de chats"""
-
-    from app.core.aws_clients import get_dynamodb_client
-    from app.services.dynamodb_queries import get_latests_messages, response_to_conversation, serialize_message, write_message, get_metadata
-    from app.services.stages.stage_logic import get_model_message
 
     primary_key = "USER#"+user_id+"#CONV#"+conv_id
 
@@ -16,11 +13,10 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
     ''' - recuperamos contexto
         - anexamos nuevo mensaje
         - guardamos nuevo mensaje  '''
-    dynamodb = get_dynamodb_client() # creacion sesion
 
         # recuperamos historial, damos formato al nuevo mensaje y juntamos todo en una sola variable.
-    latest_messages = get_latests_messages(dynamodb, primary_key, limit=10)
-    latest_conversation = response_to_conversation(latest_messages) 
+    latest_messages = get_latests_messages(primary_key, limit=10)
+    latest_conversation = convert_to_conversation(latest_messages)
     latest_conversation.append(format_message(message))
 
     
@@ -33,6 +29,7 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
     #3. Route stage
     match chat_stage:
         case "extract": 
+
             from app.services.stages.stage1_extract import handle as stage1_handler
 
             response = stage1_handler(latest_conversation)
@@ -41,9 +38,9 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
 
             if response["next_stage"] == True:
                 from app.services.stages.stage2_recommend import handler as stage2_handler
-                chat_stage = "recommend"        # cambiamos el chat_stage si amerita.
+                chat_stage = "recommend"    # cambiamos el chat_stage si amerita.
                 response = stage2_handler(lead) # ejecutamos el siguiente stage directamente y asociamos su respuesta
-            
+          
         case "recommend":
             from app.services.stages.stage2_recommend import handler as stage2_handler
             lead = {
@@ -65,13 +62,9 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
     metadata["lead"] = lead
     
     #4. Guardar Mensajes
-        # ( pendiente agregar chat_stage al guardar mensaje )
-    model_message = get_model_message(chat_stage, response)
-
-    write_message(dynamodb, DYNAMODB_TABLE,
-        serialize_message(message, primary_key, role='user', metadata=metadata)) 
-    write_message(dynamodb, DYNAMODB_TABLE,
-        serialize_message(model_message, primary_key, role='assistant', metadata=metadata))
+    #saving user message:
+    save_user_message(primary_key, message, metadata)
+    save_response_message(primary_key, response, metadata, chat_stage)
 
     #5. Retornar respuesta
     return chat_stage, response
@@ -85,34 +78,89 @@ def format_message(message: str, role: str="user"):
     estructura de mensaje para bedrock"""
     return {'role': role, 'content': [{'text': message}]}
 
-def format_conversation(conversation_history, verbose: bool=False):
-    """Formats the output for chat history recovery"""
-    formatted_history = []
-    if verbose==False:
-        for item in conversation_history['Items'][::-1]:
-            text = item['message']['S']
-            role = item['role']['S']
-            formatted_history.append({'role': role, 'message': text})
-    elif verbose==True:
-        for item in conversation_history['Items'][::-1]:
-            text = item['message']['S']
-            role = item['role']['S']
-            timestamp = item['SK']['S']
-            metadata = item['metadata']['M']
-            formatted_history.append({'role': role, 'message': text, 'timestamp': timestamp, 'metadata': metadata})
-    return formatted_history
+
+def save_user_message(primary_key, message, metadata):
+    """Code for formatting user message and saving into dynamoDB"""
+
+    try:
+        user_data_dict = {
+            "PK" : primary_key,
+            "role" : "user",
+            "content_type": "text",
+            "content": {
+                "text" : message
+            },
+            "metadata": metadata
+        }
+        user_message_dict = message_wrapper_flex(user_data_dict)
+        formatted_message = ChatMessage(**user_message_dict)
+        serialized_user_message = serialize_item(formatted_message)
+        return write_message(DYNAMODB_TABLE, serialized_user_message)
+    except Exception as e:
+        print(f"Error saving user message: {e}")
+        return None
+    
+def save_response_message(primary_key:str, response, metadata:dict, stage:str):
+    """Code for formatting response and saving into dynamoDB"""
+    try:
+        match stage:
+            case "extract":
+                data_dict = {
+                    "PK" : primary_key,
+                    "role" : "assistant",
+                    "content_type": "text",
+                    "content": {
+                        "text" : response.get('model_response')
+                    },
+                    "metadata": metadata
+                }
+            case "recommend":
+                data_dict = {
+                    "PK" : primary_key,
+                    "role" : "assistant",
+                    "content_type": "property_list",
+                    "content": {
+                        "properties" : response
+                    },
+                    "metadata": metadata
+                }
+            case _:
+                data_dict = {
+                    "PK" : primary_key,
+                    "role" : "assistant",
+                    "content_type": "text",
+                    "content": {
+                        "text" : "error saving response message"
+                    },
+                    "metadata": metadata
+                }
+        message_dict = message_wrapper_flex(data_dict)
+        formatted_message = ChatMessage(**message_dict)
+        ser_item = serialize_item(formatted_message)
+        return write_message(DYNAMODB_TABLE, ser_item)
+    except Exception as e:
+        print(f"Error saving response message: {e}")
+        return None
 
 
-def format_conversation_2(conversation_history, verbose=False):
-    """Formats the output for chat history recovery
-    version 2: Using deserializer"""
-    formatted_history = []
-    deserializer = TypeDeserializer()
-    for item in conversation_history['Items'][::-1]:
-        deserialized_item =  { k: deserializer.deserialize(v) for k, v in item.items()}
-        if verbose==False:
-            del deserialized_item['metadata']
-            del deserialized_item['SK']
-        formatted_history.append(ChatHistoryElement(**deserialized_item))
+def convert_to_conversation(latest_messages):
+    """Convierte los mensajes en una conversación bedrock"""
+    messages = []
+    for serialized_item in latest_messages.get("Items"):
+        item = deserialize_item(serialized_item)
 
-    return formatted_history
+        match item.get('content_type'):
+            case 'text':
+                content = item.get('content').get('text')
+            case 'property_list':
+                content = 'We recommended properties to client in here.'
+            case _:
+                content = 'Not defined content type'
+
+        message_entry = {
+            'role': item.get('role'),
+            'content': [{'text': content}]
+        }
+
+        messages.append(message_entry)
+    return messages

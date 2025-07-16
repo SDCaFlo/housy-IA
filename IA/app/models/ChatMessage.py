@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, List, Union
+from typing import Optional, Dict, List, Union, Literal, Any
 
 
 class ChatMessage(BaseModel):
@@ -7,7 +7,8 @@ class ChatMessage(BaseModel):
     PK: str
     SK: str
     role: str
-    message: str
+    content_type: Literal["text", "property_list"]
+    content: Dict[str, Any]
     metadata: Optional[Dict] = None
 
 class UserMessage(BaseModel):
@@ -35,7 +36,8 @@ class ChatHistoryRequest(BaseModel):
 class ChatHistoryElement(BaseModel):
     """Base element for ChatHistoryResponse"""
     role: str
-    message: str
+    content: Dict[str, Any]
+    content_type: Literal["text", "property_list"]
     SK: Optional[str] = None
     metadata: Optional[Dict] = None
 
