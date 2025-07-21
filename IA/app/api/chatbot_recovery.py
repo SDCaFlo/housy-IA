@@ -11,7 +11,7 @@ async def chat_history_request(payload: ChatHistoryRequest):
     """
     try:
         primary_key = "USER#" + payload.user_id + "#CONV#" + payload.conv_id
-        raw_conversation = get_latests_messages(primary_key, payload.limit)
+        raw_conversation = get_latests_messages(primary_key, payload.limit, )
         formatted_conversation = format_messages(raw_conversation, payload.verbose)
 
         if payload.reverse == True:
