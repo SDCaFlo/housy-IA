@@ -18,7 +18,7 @@ def get_all_messages(primary_key: str):
         )
     return response
 
-def get_latests_messages(primary_key: str, limit: int = 2):
+def get_latests_messages(primary_key: str, limit: int = 2, order: bool=True):
     "Funcion para retornar todos los ultimos 10 mensajes, brindando un primary Key."
     "Se debe pasar la session o cliente como el parámetro 'dynamodb'"
 
@@ -29,9 +29,13 @@ def get_latests_messages(primary_key: str, limit: int = 2):
         ExpressionAttributeValues = {
             ':pk_val' : {'S' : primary_key}
             },
-        ScanIndexForward=True,  # orden descendente
+        ScanIndexForward=False,  # orden descendente, últimos mensajes
         Limit=limit
-        )   
+        )
+    
+    if order==True:
+        response['Items'] = response.get('Items')[::-1]
+
     return response
 
 
