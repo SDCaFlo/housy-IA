@@ -23,5 +23,3 @@ def get_model_message(stage, response):
         model_message = f"error matching message: {e}"
     
     return model_message
-
-

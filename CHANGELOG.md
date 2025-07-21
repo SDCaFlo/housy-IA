@@ -7,12 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-- Cambiar el formato de output del endpoint: app.chatbot_recovery./message_history.
 - Implementar búsqueda por ciudad / geolocalizacion en opensearch / postgresql
 - Stage 3
 - Trigger al crear propiedades hace un update de db opensearch
+- Implementación de historial de cantidad de mensajes por conversación
 
-## [1.4.1] - 2025-07-15
+## [1.2.1] - 2025-07-15
+- Cambio del formato de output del endpoint: app.chatbot_recovery./message_history.
 
 ### Fixed
 - Búsqueda opensearch retornaba resultados vacios
