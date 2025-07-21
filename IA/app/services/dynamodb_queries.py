@@ -22,6 +22,8 @@ def get_latests_messages(primary_key: str, limit: int = 2, order: bool=True):
     "Funcion para retornar todos los ultimos 10 mensajes, brindando un primary Key."
     "Se debe pasar la session o cliente como el parámetro 'dynamodb'"
 
+    if limit < 1:
+        limit = 1
 
     response = get_dynamodb_client().query(
         TableName = 'ChatMessages',

@@ -93,7 +93,7 @@ def handle(conversation):
     result = full_chain.invoke(
         {'conversation': conversation,
          'base_prompt': BASE_PROMPT}
-    )    
+    )
    
     return result
 

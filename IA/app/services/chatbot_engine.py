@@ -10,12 +10,10 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
     primary_key = "USER#"+user_id+"#CONV#"+conv_id
 
     #1. Get Chat History
-    ''' - recuperamos contexto
-        - anexamos nuevo mensaje
-        - guardamos nuevo mensaje  '''
+    # recuperamos historial, damos formato al nuevo mensaje y juntamos todo en una sola variable.
 
-        # recuperamos historial, damos formato al nuevo mensaje y juntamos todo en una sola variable.
-    latest_messages = get_latests_messages(primary_key, limit=10)
+    conversation_length = get_conversation_length(primary_key)
+    latest_messages = get_latests_messages(primary_key, limit=conversation_length)
     latest_conversation = convert_to_conversation(latest_messages)
     latest_conversation.append(format_message(message))
 
@@ -60,6 +58,7 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
     #metadata modification:
     metadata["stage"] = chat_stage
     metadata["lead"] = lead
+    metadata["conversation_length"] = conversation_length + 2.0
     
     #4. Guardar Mensajes
     #saving user message:
@@ -164,3 +163,17 @@ def convert_to_conversation(latest_messages):
 
         messages.append(message_entry)
     return messages
+
+
+
+def get_conversation_length(primary_key: str) -> int:
+    """Permite recuperar la cantidad de mensajes dentro del contexto actual"""
+
+    try:
+        last_message = get_latests_messages(primary_key, limit=1)
+        conversation_length = int(last_message['Items'][0]['metadata']['M']['conversation_length']['N'])
+    except Exception as e:
+        conversation_length = 0
+        print('Stage_1:message_recovery: No conversation history found')
+
+    return conversation_length
