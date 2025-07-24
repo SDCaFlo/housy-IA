@@ -1,28 +1,28 @@
-from app.core.aws_clients import get_bedrock_client
-from langchain_aws.chat_models.bedrock_converse import ChatBedrockConverse
+from app.core.aws_clients import get_langchain_bedrock_client
 from app.core.config import BEDROCK_MODEL_ID
 from app.models.PropertyLead import PropertyLead
 from langchain_core.runnables import RunnableLambda, RunnableBranch
-from langchain_core.prompts import PromptTemplate
+from app.services.stages.stage_logic import summarize_conversation
 #doc: https://python.langchain.com/api_reference/aws/index.html
 #doc: https://python.langchain.com/api_reference/aws/chat_models/langchain_aws.chat_models.bedrock_converse.ChatBedrockConverse.html#langchain_aws.chat_models.bedrock_converse.ChatBedrockConverse
 
 
-BASE_PROMPT = "Simula ser un asesor inmobiliario que guía al usuario con preguntas "\
-        "para entender qué tipo de propiedad desea el cliente llenando los datos REQUERIDOS."\
+BASE_PROMPT = "Simula ser un asesor inmobiliario que guía al usuario con PREGUNTAS "\
+        "para entender qué tipo de propiedad desea el cliente."\
         " Sé breve pero cordial y amigable. (máx 50 palabras)." \
+        "❗NO RECOMENDEMOS NADA, solo hagamos preguntas."\
         "❗Actualmente los datos FALTANTES son: {datos_faltantes} <- Pregunta por estos ❗"\
         " Como contexto ten en cuenta los datos que podemos recolectar y su descripción:" \
         "{data_info}"
 
-LEAD_PROMPT = """A partir del siguiente historial de mensajes de usuario, extrae únicamente los datos explícitamente mencionados.
+LEAD_PROMPT = """A partir del siguiente mensaje de usuario, extrae únicamente los datos explícitamente mencionados.
 
             ❗No completes campos por inferencia.  
             ❗Si el dato no está mencionado literalmente o con sinónimos claros, déjalo como `None`.
 
             No asumas que busca alquiler solo porque menciona "departamento", ni que busca compra porque menciona "terreno". Solo responde con datos explícitos.
 
-            Historial de mensajes:
+            Mensaje de usuario:
             {input}
             """
 
@@ -50,7 +50,8 @@ def handle(conversation):
         conversation=vars["conversation"]
     ))
     
-    build_lead_prompt_chain = RunnableLambda(lambda vars: build_lead_prompt(conversation= vars['conversation']))
+    summarize_conversation_chain = RunnableLambda(lambda vars: summarize_conversation(conversation= vars['conversation']))
+    build_lead_prompt_chain = RunnableLambda(lambda vars: build_lead_prompt_from_summary(conversation_summary= vars['conversation_summary']))
     get_lead_chain = RunnableLambda(lambda vars: get_lead_with_prompt(lead_prompt=vars['lead_prompt']))
     #lead_extraction_chain = RunnableLambda(lambda vars: get_lead(conversation = vars['conversation']))
     lead_verification_chain = RunnableLambda(lambda vars: has_minimium_data(lead=vars['lead']))
@@ -59,6 +60,7 @@ def handle(conversation):
     # Definicion de cadenas principales.
     pre_chain = (
         RunnableLambda(lambda vars: vars)
+        .assign(conversation_summary = summarize_conversation_chain)
         .assign(lead_prompt = build_lead_prompt_chain)          # construimos el prompt_lead
         .assign(lead = get_lead_chain)                          # extramos lead
         .assign(lead_verification = lead_verification_chain)    # verificacion de campos requeridos
@@ -101,7 +103,7 @@ def handle(conversation):
 def model_converse(prompt, conversation):
     """Conversation with langchain bedrock."""
     
-    chat = get_langchain_bedrock_client()                        # client        
+    chat = get_langchain_bedrock_client(model_id=BEDROCK_MODEL_ID)                        # client        
     messages =   message_with_prompt_build(prompt, conversation) # Message construction
     response = chat.invoke(messages)                             # invoke model
     return response.content
@@ -110,7 +112,7 @@ def model_converse(prompt, conversation):
 def get_lead(conversation):
     """Obtiene un lead formateado segun la clase definida en app.models.PropertyLead"""
 
-    chat = get_langchain_bedrock_client(**LEAD_GENERATION_PARAMS)
+    chat = get_langchain_bedrock_client(model_id=BEDROCK_MODEL_ID,**LEAD_GENERATION_PARAMS)
     structured_llm = chat.with_structured_output(PropertyLead)
     prompt = build_lead_prompt(conversation)
     
@@ -120,7 +122,7 @@ def get_lead_with_prompt(lead_prompt:str, include_raw:bool = False):
     """Obtiene un lead formateado segun la clase definida en app.models.PropertyLead
     Usa un prompt ya definido"""
 
-    chat = get_langchain_bedrock_client(**LEAD_GENERATION_PARAMS)
+    chat = get_langchain_bedrock_client(model_id=BEDROCK_MODEL_ID, **LEAD_GENERATION_PARAMS)
     structured_llm = chat.with_structured_output(PropertyLead, include_raw=include_raw)
     
     return structured_llm.invoke(lead_prompt)
@@ -161,7 +163,6 @@ def get_missing_info_2(lead: PropertyLead) -> str:
     return ", ".join(missing_info)
 
 
-
 #### UTILS ####
 
 
@@ -175,6 +176,11 @@ def build_lead_prompt(conversation):
             message_history += " " + message['content'][0]['text'] + '\n'
 
     return LEAD_PROMPT.format(input=message_history)
+
+def build_lead_prompt_from_summary(conversation_summary):
+    """Construye un prompt para la generación de lead"""
+
+    return LEAD_PROMPT.format(input=conversation_summary)
 
 
 
@@ -219,17 +225,5 @@ def build_data_context() -> str:
     return data_context.strip("\n")
 
 
-def get_langchain_bedrock_client(max_tokens: int = 250, temperature: float = 0.6, top_p: float =0.6):
-    """Sets up langchain bedrock client"""
-    client = get_bedrock_client()
-    
-    #client config
-    chat = ChatBedrockConverse(
-        client=client,
-        model=BEDROCK_MODEL_ID,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        top_p=top_p
-        )
-    return chat
+
 

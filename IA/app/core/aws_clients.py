@@ -47,6 +47,23 @@ def get_opensearch_client():
     return client
 
 
+def get_langchain_bedrock_client(model_id, max_tokens: int = 250, temperature: float = 0.6, top_p: float =0.6):
+    """Sets up langchain bedrock client"""
+    from langchain_aws.chat_models.bedrock_converse import ChatBedrockConverse
+    
+    client = get_bedrock_client()
+    
+    #client config
+    chat = ChatBedrockConverse(
+        client=client,
+        model=model_id,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        top_p=top_p
+        )
+    return chat
+
+
 
 
 
