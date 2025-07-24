@@ -16,6 +16,8 @@ if os.getenv("ENV", "local") == "local":
     load_dotenv()
 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+INTENT_DETECTION_MODEL = os.getenv("INTENT_DETECTION_MODEL", "amazon.nova-micro-v1:0")
+SUMMARIZE_MODEL = os.getenv("INTENT_DETECTION_MODEL", "amazon.nova-micro-v1:0")
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "amazon.nova-micro-v1:0")
 DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE", "ChatMessages")
 LOCAL_PROFILE_NAME=os.getenv("LOCAL_PROFILE_NAME", "HousyProject")

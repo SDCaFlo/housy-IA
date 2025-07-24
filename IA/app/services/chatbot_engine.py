@@ -4,6 +4,7 @@ from boto3.dynamodb.types import TypeDeserializer
 from app.services.dynamodb_queries import get_latests_messages, get_metadata,deserialize_item
 from app.services.dynamodb_queries import message_wrapper_flex, serialize_item, write_message
 
+
 def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {}, verbose:bool = False):
     """Logica por stages para el procesamiento de chats"""
 
@@ -20,40 +21,45 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
     
     #2. Determine Stage
     try:
-        chat_stage = get_metadata(latest_messages)[-1]['stage'] # obtiene el ultimo stage del historial de conversacion
+        chat_stage = get_metadata(latest_messages)[0]['stage'] # obtiene el ultimo stage del historial de conversacion
     except:
         chat_stage = "extract"      # si no es posible, asumir extract stage
 
     #3. Route stage
-    match chat_stage:
-        case "extract": 
+    for i in range(5): #loop protect (5 times)
+        print("loop count: ", i)
+        match chat_stage:
+            case "extract": 
 
-            from app.services.stages.stage1_extract import handle as stage1_handler
+                from app.services.stages.stage1_extract import handle as stage1_handler
 
-            response = stage1_handler(latest_conversation)
- 
-            lead = response["lead"]             # recuperamos el lead
+                response = stage1_handler(latest_conversation)
+    
+                lead = response["lead"]             # recuperamos el lead
 
-            if response["next_stage"] == True:
-                from app.services.stages.stage2_recommend import handler as stage2_handler
-                chat_stage = "recommend"    # cambiamos el chat_stage si amerita.
-                response = stage2_handler(lead) # ejecutamos el siguiente stage directamente y asociamos su respuesta
-          
-        case "recommend":
-            from app.services.stages.stage2_recommend import handler as stage2_handler
-            lead = {
-                "ubicacion": "Lima, Perú, San Isidro",
-                "tipo_propiedad": "departamento",
-                "transaccion": "alquiler",
-                "presupuesto": None,
-                "numero_dormitorios": 2,
-                "numero_banos": 2,
-                "metraje_minimo": None,
-                "amenidades": ["gimnasio"],
-                "cercania": None,
-                "pet_friendly": True
-            }
-            response = stage2_handler(lead)
+                if response["next_stage"] == True:
+                    from app.services.stages.stage2_recommend import handler as stage2_handler
+                    chat_stage = "recommend"    # cambiamos el chat_stage si amerita.
+                    response = stage2_handler(lead) # ejecutamos el siguiente stage directamente y asociamos su respuesta
+                
+                break
+            case "recommend":
+                from app.services.stages.stage3_intent import handler as stage3_handler
+                # Analizamos intent y determinamos siguiente stage
+                response = stage3_handler(user_message=message)
+                chat_stage = response.get('next_stage')
+                
+                if chat_stage == 'extract':
+                    # Regresamos al stage 1, considerando una nueva conversación.
+                    conversation_length = 0
+                    latest_conversation = [latest_conversation[-1]]
+            
+            case "refine_search":
+                # de momento solo redirigimos hacia stage 1.
+                #response = "pending from refine_logic"
+                #lead = None
+                chat_stage = 'extract'
+
     
     #metadata modification:
     metadata["stage"] = chat_stage
@@ -152,7 +158,7 @@ def convert_to_conversation(latest_messages):
             case 'text':
                 content = item.get('content').get('text')
             case 'property_list':
-                content = 'We recommended properties to client in here.'
+                content = '**Te recomendamos las siguientes propiedades** : (Lista de propiedades)'
             case _:
                 content = 'Not defined content type'
 
