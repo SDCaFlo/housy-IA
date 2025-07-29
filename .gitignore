@@ -37,4 +37,8 @@ ENV/
 
 # OS
 .DS_Store
-Thumbs.db
+Thumbs.dblambda_layer/
+lambda-docker-clean/
+*.zip
+*.so
+*.so.*
