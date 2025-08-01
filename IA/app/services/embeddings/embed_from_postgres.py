@@ -1,109 +1,142 @@
 import os
-import hashlib
+import sys
+project_root = os.path.abspath(os.path.join(os.getcwd(), '.'))
+print(f'project root: {project_root}')
+sys.path.append(project_root)
+
 import psycopg2
 import logging
 from dotenv import load_dotenv
-from opensearchpy import OpenSearch, helpers
+from opensearchpy import OpenSearch
+from opensearchpy.helpers import bulk
 from app.services.embeddings.bedrock_service import embed_text
-from app.utils.reverse_geocode import get_city_from_geo
+from app.core.aws_clients import get_opensearch_client
 
 # Cargar variables de entorno
 load_dotenv()
 
 # Conexión a PostgreSQL
 conn = psycopg2.connect(
-    host=os.getenv("POSTGRES_HOST"),
-    port=os.getenv("POSTGRES_PORT"),
-    user=os.getenv("POSTGRES_USER"),
-    password=os.getenv("POSTGRES_PASSWORD"),
-    database=os.getenv("POSTGRES_DB")
+    host=os.getenv("POSTGRESQL_DEV_URL"),
+    port=os.getenv("POSTGRESQL_PORT"),
+    user=os.getenv("POSTGRESQL_DEV_USER"),
+    password=os.getenv("POSTGRESQL_DEV_PASSWORD"),
+    database=os.getenv("POSTGRESQL_DEV_DB")
 )
 cursor = conn.cursor()
 
 # Cliente de OpenSearch
-client = OpenSearch(
-    hosts=[{"host": os.getenv("OPENSEARCH_HOST"), "port": 443}],
-    http_auth=(os.getenv("OPENSEARCH_USERNAME"), os.getenv("OPENSEARCH_PASSWORD")),
-    use_ssl=True,
-    verify_certs=True,
-    timeout=60,
-)
+client = get_opensearch_client()
 
-INDEX_NAME = os.getenv("OPENSEARCH_INDEX", "properties")
+INDEX_NAME = os.getenv("OPENSEARCH_NEW_INDEX", "properties_2")
 
 def create_index_if_not_exists():
+
+    if client.indices.exists(index=INDEX_NAME):
+        print(f"Eliminando índice existente: {INDEX_NAME}")
+        client.indices.delete(index=INDEX_NAME)
+
     if not client.indices.exists(index=INDEX_NAME):
+        print("Creando indice nuevamente")
         client.indices.create(
             index=INDEX_NAME,
             body={
                 "settings": {"index": {"knn": True}},
                 "mappings": {
                     "properties": {
-                        "text": {"type": "text"},
-                        "embedding": {"type": "knn_vector", "dimension": 1536},
-                        "city": {"type": "keyword"}
+                        "property_id" : {"type": "keyword"},
+                        "title": {"type": "text"},
+                        "unified_description" : {"type": "text"},
+                        "description_embedding": {"type": "knn_vector", "dimension": 1536},
+                        "price": {"type": "double"},                        
+                        "geolocation": { "type": "geo_point"},
+                        "address": {"type": "text"},
+                        "property_type" : {"type": "keyword"},
+                        "operation_type": { "type": "keyword" },
+                        "status": { "type": "keyword" },
+                        "location": { "type": "keyword" },
+                        "space_count_by_type": {
+                        "type": "object",
+                        "dynamic": True
+                        }
                     }
                 }
             }
+
         )
-        logging.info(f"✅ Índice '{INDEX_NAME}' creado en OpenSearch")
-    else:
-        logging.info(f"✅ Índice '{INDEX_NAME}' ya existe en OpenSearch")
+
+
+
+
+def index_properties_from_view(batch_size=50):
+    # Extraer propiedades desde PostgreSQL
+    cursor.execute("""
+    SELECT * FROM properties_index_base
+    ORDER BY property_id ASC
+    """)
+
+    batch = []
+    processed = 0
+    
+    print("Iniciando indexacion")
+
+    while True:
+        rows = cursor.fetchmany(batch_size)
+        column_names = [desc[0] for desc in cursor.description]
+        if not rows:
+            break
+
+
+        for index, row in enumerate(rows):
+            print(f'procesando fila {index}')
+            doc = dict(zip(column_names, row))
+
+            # Asegurarse que title y description existan
+            title = doc.get("title") or ""
+            desc = doc.get("unified_description") or ""
+            address = doc.get("address") or ""
+            location = doc.get("location") or ""
+
+            # Generar vectores
+            description_embedding = embed_text(title + " " + desc)
+            location_embedding = embed_text(address + " " + location)
+
+            # Documento para OpenSearch
+            os_doc = {
+                "property_id": str(doc.get("property_id")),
+                "title": title,
+                "unified_description": desc,
+                "description_embedding": description_embedding,
+                "price": float(doc.get("price") or 0),
+                
+                # geolocalizacion
+                "geolocation": {
+                    "lat": float(doc.get("latitude") or 0),
+                    "lon": float(doc.get("longitude") or 0)
+                },
+
+                "address": address,
+                "property_type" : doc.get("property_type"),
+                "operation_type": doc.get("operation_type"),
+                "status": doc.get("status"),
+                "location": location,
+                "space_count_by_type": doc.get("space_count_by_type")            
+            }
+            
+            batch.append({
+                "_index": "properties_2",
+                "_id": str(doc.get("property_id")),
+                "_source": os_doc
+            })
+
+        if batch:
+            success, _ = bulk(client, batch)
+            processed += success
+            print(f"Indexados: {processed} documentos")
+            batch.clear()
+
 
 
 # Crear índice si no existe
 create_index_if_not_exists()
-
-# Extraer propiedades desde PostgreSQL
-cursor.execute("""
-
-SELECT title, description, property_type, address, ST_AsText(geolocation), operation_type
-FROM properties
-""")
-rows = cursor.fetchall()
-
-def parse_point(point_str: str):
-    """
-    Extrae lat y lon desde un texto WKT tipo 'POINT(lon lat)' o 'POINT (lon lat)'
-    """
-    try:
-        point_str = point_str.strip().upper().replace("POINT", "").replace("(", "").replace(")", "")
-        lon, lat = map(float, point_str.strip().split())
-        return lat, lon
-    except Exception as e:
-        logging.warning(f"❌ Error parseando geolocation '{point_str}': {e}")
-        return None, None
-
-def generate_actions(rows):
-    for title, desc, ptype, address, geoloc, op in rows:
-        text = f"{title} – {desc} – {ptype} – {address} – {op}"
-
-        lat, lon = parse_point(geoloc)
-        if lat is not None and lon is not None:
-            city = get_city_from_geo(lat, lon)
-        else:
-            city = "desconocida"
-
-        doc_id = hashlib.md5(f"{title}-{address}".encode()).hexdigest()
-
-        yield {
-            "_op_type": "index",
-            "_index": INDEX_NAME,
-            "_id": doc_id,
-            "_source": {
-                "text": text,
-                "embedding": embed_text(text),
-                "city": city
-            }
-        }
-
-# Indexación en lotes
-logging.info(f"🔄 Indexando {len(rows)} propiedades en lotes de 20...")
-
-success, _ = helpers.bulk(client, generate_actions(rows), chunk_size=20)
-
-logging.info(f"✅ Se indexaron {success} documentos correctamente.")
-
-cursor.close()
-conn.close()
-
+index_properties_from_view()
