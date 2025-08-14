@@ -40,7 +40,7 @@ def proccess_chat_turn(user_id: str, conv_id:str, message:str, metadata:dict = {
                 if response["next_stage"] == True:
                     from app.services.stages.stage2_recommend import handler as stage2_handler
                     chat_stage = "recommend"    # cambiamos el chat_stage si amerita.
-                    response = stage2_handler(lead) # ejecutamos el siguiente stage directamente y asociamos su respuesta
+                    response =    stage2_handler(lead) # ejecutamos el siguiente stage directamente y asociamos su respuesta
                 
                 break
             case "recommend":

@@ -2,6 +2,7 @@
 import os
 import boto3
 from app.core.config import AWS_REGION
+from mypy_boto3_bedrock_runtime import BedrockRuntimeClient
 
 
 def get_boto3_session():
@@ -16,7 +17,7 @@ def get_embed_client():
     session = get_boto3_session()
     return session.client("bedrock-runtime", region_name=AWS_REGION)
 
-def get_dynamodb_client():
+def get_dynamodb_client()->BedrockRuntimeClient:
     session = get_boto3_session()
     return session.client("dynamodb", region_name=AWS_REGION)
 
