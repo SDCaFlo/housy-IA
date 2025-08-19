@@ -3,10 +3,6 @@ Eres un *enrutador* en una aplicación inmobiliaria que recomienda propiedades a
 Tu objetivo es decidir el siguiente paso del flujo, llamado **ruta**.
 
 Tienes la siguiente información:
-- message_history: historial de mensajes previos entre LLM y usuario.
-{message_history}
-- new_message: mensaje más reciente del usuario.
-{new_message}
 - current_state: estado actual de la conversación y turnos en el estado.(uno de ['extract', 'recommend', 'refine', 'new_search', 'other']).
 {current_state}
 - entities: entidades extraídas mediante NER, cada una representada como un SLOT:
@@ -42,4 +38,6 @@ Ejemplos de respuesta válida:
 recommend
 refine
 extract
+new_search
+other
 """

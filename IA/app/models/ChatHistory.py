@@ -1,10 +1,14 @@
 from app.core.aws_clients import get_dynamodb_client
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
+from langchain_core.messages import HumanMessage, AIMessage
 from app.core.config import DYNAMODB_TABLE
 from pydantic import BaseModel, Field
 from typing import  Literal
 from datetime import datetime, timezone
 from app.models.PropertyLead import PropertySearchParams
+import logging 
+
+logger = logging.getLogger(__name__)
 
 class DeserializedMessage(BaseModel):
     PK: str = Field(description='Primary Key')
@@ -19,34 +23,10 @@ class ChatHistory:
     def __init__(self, user_id:str, conv_id:str):
         self.client = get_dynamodb_client()
         self.primary_key = "USER#"+user_id+"#CONV#"+conv_id
-        self.previous_len = 0
+        self.context_length = self.get_context_length()
+        self.len = 0
         self.serialized_messages = []   # guarda mensajes serialiados
-        self.deserialized_messages = [] # guarda mensajes deserializazdos
-    
-    def get_messages(self, limit: int =2):
-        """Recupera mensajes y guardar en self.messages"""
-        self.serialized_messages = [] # inicializamos
-        self.deserialized_messages = []
-
-        if limit < 1:
-            limit=1
-
-        response = self.client.query(
-            TableName = 'ChatMessages',
-            KeyConditionExpression = 'PK = :pk_val',
-            ExpressionAttributeValues = {
-                ':pk_val' : {'S' : self.primary_key}
-                },
-            ScanIndexForward=False,
-            Limit=limit
-            )
-        
-        self.serialized_messages = response.get('Items', [])[::-1]
-        self.previous_len = len(self.serialized_messages)
-        self.deserialize_messages()
-
-        return response
-    
+        self.deserialized_messages = [] # guarda mensajes deserializazdos        
 
     
     """Section: Message History Modifiers"""
@@ -96,8 +76,28 @@ class ChatHistory:
             for k, v in dynamo_object.items()
         }
     
-    def format_message_history(self):
-        """Da un formato mas familiar al historial de mensajes"""
+    def get_langchain_history(self):
+        "Returns a message history in Langchain BaseMessage format"
+        def message_mapper(deserialized_message):
+            """Maps a single message"""
+            type_map = {
+                "user": HumanMessage,
+                "assistant": AIMessage
+            }
+            langchain_message = type_map.get(deserialized_message.get("role"))(content=deserialized_message.get("content", dict()).get("text", "<List of recommended properties>"))
+            return langchain_message
+
+        langchain_history = []
+        try:
+            logger.info('Function "get_langchain_history": Attempting to format conversation')
+            for message in self.deserialized_messages:
+                langchain_history.append(message_mapper(message))
+        except Exception as e:
+            logger.error(f'Function "get_langchain_history": failed to convert history. Detail:{e}')
+            logger.info('Function "get_langchain_history": Returning empty list')
+
+        
+        return langchain_history
         
     
     """Section: Database interaction"""
@@ -105,13 +105,38 @@ class ChatHistory:
     def save_new_messages(self):
         """Guarda el estado actual de los mensajes en dynamodb"""
         new_len = len(self.serialized_messages)
-        save_index = (-1)*( new_len - self.previous_len)
+        save_index = (-1)*( new_len - self.len)
         for message in self.serialized_messages[save_index::]:
             self.client.put_item(
                 TableName=DYNAMODB_TABLE,
                 Item=message
             )
-        self.previous_len = new_len
+        self.len = new_len
+
+    def get_messages(self, limit: int =2):
+        """Recupera mensajes y guardar en self.messages"""
+        self.serialized_messages = [] # inicializamos
+        self.deserialized_messages = []
+
+        if limit < 1:
+            limit=1
+
+        response = self.client.query(
+            TableName = 'ChatMessages',
+            KeyConditionExpression = 'PK = :pk_val',
+            ExpressionAttributeValues = {
+                ':pk_val' : {'S' : self.primary_key}
+                },
+            ScanIndexForward=False,
+            Limit=limit
+            )
+        
+        self.serialized_messages = response.get('Items', [])[::-1]
+        self.len = len(self.serialized_messages)
+        self.deserialize_messages()
+
+        return response
+
 
 
     """Section: Utils"""
@@ -149,4 +174,18 @@ class ChatHistory:
         except Exception as e:
             print(f'Failed to retrieve lead: {e}, returning default lead')
             return PropertySearchParams().model_dump_json()
+        
+    
+    def get_context_length(self):
+        "Recovers the context length of the conversation"
+        self.get_messages(limit=1)
+        try:
+            logger.info('Method get_context_length: Retrieving context length')
+            context_length = int(self.deserialized_messages[0].get('metadata').get('conversation_length'))
+        except Exception as e:
+            logger.error(f'Method get_context_length: Could not get context_length/conversation_length. Detail: {e}')
+            logger.info('Method get_context_length: Setting context_length to 0')
+            context_length = 0
+        self.context_length = 0
+        return context_length
             
