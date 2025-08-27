@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.models.ChatMessage import UserMessage, ChatResponse
-from app.services.chatbot_engine import proccess_chat_turn
+from app.services.chatblot_langraph import proccess_chat_turn
 #from app.utils.intention_detection import tiene_intencion_busqueda
 #from app.services.embeddings.search_opensearch import search_similar_properties
 
@@ -16,22 +16,22 @@ async def chat_endpoint(payload: UserMessage):
     junto con los IDs de las propiedades recomendadas si existen.
     """
     try:
-        message = payload.message
+        user_message = payload.user_message
         user_id = payload.user_id
         conv_id = payload.conv_id
 
         verbose = payload.verbose
         metadata = payload.metadata
 
-        stage, response = proccess_chat_turn(
+        response = proccess_chat_turn(
             user_id=user_id,
             conv_id=conv_id,
-            message=message,
+            user_message=user_message,
             metadata=metadata,
             verbose=verbose
         )
 
-        return ChatResponse(stage=stage, response=response)
+        return ChatResponse(response=response)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

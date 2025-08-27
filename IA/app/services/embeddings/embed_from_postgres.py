@@ -1,13 +1,12 @@
 import os
 import sys
+import time
 project_root = os.path.abspath(os.path.join(os.getcwd(), '.'))
 print(f'project root: {project_root}')
 sys.path.append(project_root)
 
 import psycopg2
-import logging
 from dotenv import load_dotenv
-from opensearchpy import OpenSearch
 from opensearchpy.helpers import bulk
 from app.services.embeddings.bedrock_service import embed_text
 from app.core.aws_clients import get_opensearch_client
@@ -28,7 +27,7 @@ cursor = conn.cursor()
 # Cliente de OpenSearch
 client = get_opensearch_client()
 
-INDEX_NAME = os.getenv("OPENSEARCH_NEW_INDEX", "properties_2")
+INDEX_NAME = os.getenv("OPENSEARCH_INDEX", "properties")
 
 def create_index_if_not_exists():
 
@@ -58,7 +57,10 @@ def create_index_if_not_exists():
                         "space_count_by_type": {
                         "type": "object",
                         "dynamic": True
-                        }
+                        },
+                        "_audit_date": {"type": "date"},
+                        "_indexed_at": {"type": "date"},
+                        "_operation": { "type": "text"}              
                     }
                 }
             }
@@ -98,8 +100,7 @@ def index_properties_from_view(batch_size=50):
             location = doc.get("location") or ""
 
             # Generar vectores
-            description_embedding = embed_text(title + " " + desc)
-            location_embedding = embed_text(address + " " + location)
+            description_embedding = embed_text(title + " " + desc + " " + location + " " + address)
 
             # Documento para OpenSearch
             os_doc = {
@@ -120,11 +121,13 @@ def index_properties_from_view(batch_size=50):
                 "operation_type": doc.get("operation_type"),
                 "status": doc.get("status"),
                 "location": location,
-                "space_count_by_type": doc.get("space_count_by_type")            
+                "space_count_by_type": doc.get("space_count_by_type"),
+                "_operation": "new",
+                "_indexed_at": time.strftime('%Y-%m-%dT%H:%M:%SZ')
             }
             
             batch.append({
-                "_index": "properties_2",
+                "_index": INDEX_NAME,
                 "_id": str(doc.get("property_id")),
                 "_source": os_doc
             })

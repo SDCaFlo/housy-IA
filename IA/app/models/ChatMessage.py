@@ -15,13 +15,12 @@ class UserMessage(BaseModel):
     # clase para nuevo mensaje de cliente
     user_id: str
     conv_id: str
-    message: str
+    user_message: str
     verbose: bool = False
     metadata: Optional[Dict] = None
 
 class ChatResponse(BaseModel):
     # model response in str
-    stage: str
     response: Union[str, List, Dict]
 
 class ChatHistoryRequest(BaseModel):

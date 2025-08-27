@@ -7,17 +7,21 @@ from typing import  Literal
 from datetime import datetime, timezone
 from app.models.PropertyLead import PropertySearchParams
 import logging 
+import json
+import uuid
 
 logger = logging.getLogger(__name__)
 
-class DeserializedMessage(BaseModel):
-    PK: str = Field(description='Primary Key')
-    SK: str = Field(description='Time', 
-                    default_factory=lambda: 'TIMESTAMP#'+datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z') )
+class BaseMessage(BaseModel):
     content: dict = Field(description='message content')
     role: Literal['user', 'assistant'] = Field(description='role')
     content_type: Literal['text', 'property_list'] = Field(default='text', description='tipo de contenido ')
     metadata: dict = Field(default=dict(), description='metadata')
+
+class DeserializedMessage(BaseMessage):
+    PK: str = Field(description='Primary Key')
+    SK: str = Field(description='Time', 
+                    default_factory=lambda: 'TIMESTAMP#'+datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z') + "#" + str(uuid.uuid4()))
     
 class ChatHistory:
     def __init__(self, user_id:str, conv_id:str):
@@ -82,7 +86,9 @@ class ChatHistory:
             """Maps a single message"""
             type_map = {
                 "user": HumanMessage,
-                "assistant": AIMessage
+                "assistant": AIMessage,
+                "ai": AIMessage,
+                "human": HumanMessage
             }
             langchain_message = type_map.get(deserialized_message.get("role"))(content=deserialized_message.get("content", dict()).get("text", "<List of recommended properties>"))
             return langchain_message
@@ -146,7 +152,7 @@ class ChatHistory:
         try:
             stage_list = []
             for message in self.deserialized_messages:
-                stage_list.append(message.get('metadata', {}).get('stage', 'extract'))
+                stage_list.append(message.get('metadata', {}).get('stage', 'query_user'))
             
             last_stage = stage_list[-1]
                 
@@ -161,19 +167,19 @@ class ChatHistory:
 
         except Exception as e:
             print(f'Failed to retrieve stages: {e}, returning default stage')
-            return 'extract', 0
+            return 'query_user', 0
     
-    def retrieve_current_lead(self)->dict:
-        lead = {}
+    def retrieve_current_lead(self)->'PropertySearchParams':
+        "Retrieves the lead from the last message in the PropertySearchParams class format"
         try:
-            lead = self.deserialized_messages[-1].get('metadata', {}).get('lead', {})
+            lead:str = self.deserialized_messages[-1].get('metadata', {}).get('lead', {})
             if lead == {}:
-                return PropertySearchParams().model_dump_json()
+                return PropertySearchParams()
             else:
-                return lead
+                return PropertySearchParams(**json.loads(lead))
         except Exception as e:
-            print(f'Failed to retrieve lead: {e}, returning default lead')
-            return PropertySearchParams().model_dump_json()
+            logger.info(f'Failed to retrieve lead: {e}, returning default lead')
+            return PropertySearchParams()
         
     
     def get_context_length(self):
@@ -188,4 +194,7 @@ class ChatHistory:
             context_length = 0
         self.context_length = 0
         return context_length
+    
+    def set_context_length(self, value:int):
+        self.deserialized_messages[-1]['metadata']['conversation_length'] = value
             

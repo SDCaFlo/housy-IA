@@ -1,9 +1,13 @@
 from app.core.aws_clients import get_langchain_bedrock_client
-from langchain_core.runnables import RunnableLambda
 from app.models.PropertyLead import PropertySearchParams
+from app.models.ChatState import InputRouter
 from app.core.config import ROUTER_MODEL_ID
-from app.models.LLM_prompts import ROUTER_PROMPT
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from app.models.LLM_prompts import ROUTER_PROMPT, ROUTER_PROMPT_v3
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
+from langchain.output_parsers import EnumOutputParser
+
+
+
 
 class LlmRouter():
     def __init__(self):
@@ -45,5 +49,37 @@ class LlmRouter():
              "input": self.new_message}
         )
         return response.content
+    
+    def get_chain_parameters(self):
+        return {"history": self.message_history, "input": self.new_message}
+    
+def get_route_chain():
 
+    llm = get_langchain_bedrock_client(model_id=ROUTER_MODEL_ID, temperature=0.1, max_tokens=5)
 
+    prompt = ChatPromptTemplate.from_messages([
+            ("system", ROUTER_PROMPT), # inputs: input_states, entities
+            ("human", "{input}")    
+        ])
+    
+    return prompt | llm
+
+def get_route_chain_v2():
+
+    parser = EnumOutputParser(enum=InputRouter)
+    format_instructions = parser.get_format_instructions()
+
+    prompt = PromptTemplate(
+        template= ROUTER_PROMPT_v3,
+        input_variables=[
+            #"input_state", "entities", 
+            "user_message"],
+        partial_variables={
+            "route_options": ', '.join([r.value for r in InputRouter]),
+            "format_instructions": format_instructions
+        }
+    )
+
+    llm = get_langchain_bedrock_client(model_id=ROUTER_MODEL_ID, temperature=0.1, max_tokens=20)
+
+    return prompt | llm | parser
