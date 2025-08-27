@@ -98,6 +98,8 @@ def proccess_chat_turn(user_id: str = '', conv_id:str = '', user_message:str = '
     else:
         current_context_length = chat_history.context_length
     
+
+    final_state = response.get('final_output').get('final_state')
     # Saving result
     # bot message
     chat_history.add_message(
@@ -106,17 +108,25 @@ def proccess_chat_turn(user_id: str = '', conv_id:str = '', user_message:str = '
         content_type = response.get('final_output').get('content_type'),
         metadata={
             "lead": response.get('final_output').get('lead'),
-            "state": response.get('final_output').get('final_state'),
+            "state": final_state,
             "conversation_length": current_context_length+2
         }
     )
     # guardado
     chat_history.save_new_messages()
 
-    if verbose:
-        return response
+    # LOGICA adicional para el frontend
+    if final_state in ['other', 'query_user']:
+        output_stage = 'extract'
+        output_content = {'model_response': response.get('final_output').get('content')}
     else:
-        return response.get('final_output')
+        output_stage = 'recommend'
+        output_content = response.get('final_output').get('content').get('properties')
+
+    if verbose:
+        return output_stage, response
+    else:
+        return output_stage, output_content
 
 # Node Function Definition
 def run_input_route(state: MyState):

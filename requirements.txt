@@ -9,6 +9,7 @@ starlette #para CORS
 # AWS
 boto3
 botocore
+mypy_boto3_bedrock_runtime
 
 # OpenSearch
 opensearch-py
@@ -23,4 +24,5 @@ SQLAlchemy
 #langchain
 langchain
 langchain-aws
+langgraph
 

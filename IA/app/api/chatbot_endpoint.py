@@ -16,14 +16,14 @@ async def chat_endpoint(payload: UserMessage):
     junto con los IDs de las propiedades recomendadas si existen.
     """
     try:
-        user_message = payload.user_message
+        user_message = payload.message
         user_id = payload.user_id
         conv_id = payload.conv_id
 
         verbose = payload.verbose
         metadata = payload.metadata
 
-        response = proccess_chat_turn(
+        stage, response = proccess_chat_turn(
             user_id=user_id,
             conv_id=conv_id,
             user_message=user_message,
@@ -31,7 +31,7 @@ async def chat_endpoint(payload: UserMessage):
             verbose=verbose
         )
 
-        return ChatResponse(response=response)
+        return ChatResponse(stage=stage,response=response)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
