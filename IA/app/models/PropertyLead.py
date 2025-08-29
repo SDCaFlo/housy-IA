@@ -13,6 +13,7 @@ class SlotState(str, Enum):
     MISSING = 'missing'
     PENDING_VALIDATION = 'pending_validation'
     VALIDATED = 'validated'
+    VALIDATION_FAILED = 'validation_failed'
 
 
 class PropertyType(str, Enum):

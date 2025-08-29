@@ -52,6 +52,7 @@ def proccess_chat_turn(user_id: str = '', conv_id:str = '', user_message:str = '
     workflow.add_node("search_properties", run_search_properties)
     workflow.add_node("new_search", run_new_search)
     workflow.add_node("format_output", run_format_output)
+    workflow.add_node("verify_location", run_verify_location)
 
     # conditionals
     workflow.add_conditional_edges(
@@ -69,7 +70,8 @@ def proccess_chat_turn(user_id: str = '', conv_id:str = '', user_message:str = '
 
     # Node Connections
     workflow.set_entry_point("input_router")
-    workflow.add_edge("extract", "lead_router")
+    workflow.add_edge("extract", "verify_location")
+    workflow.add_edge("verify_location", "lead_router")
     workflow.add_edge("new_search", "extract")
     workflow.add_edge("other", "format_output")
     workflow.add_edge("query_user", "format_output")
@@ -181,6 +183,35 @@ def run_extract(state: MyState):
     state.extract_result['merged_lead'] = result['extract_merged_lead']
     state.current_state_flow.append('extract')
     return state
+
+def run_verify_location(state: MyState):
+    """Verify the location in the lead"""
+    
+    lead: PropertySearchParams = state.extract_result.get('merged_lead')
+    search_location = lead.location.value
+    validation_status = lead.location.state.value
+
+    #case 1: if there's no location inside the lead -> Nothing to do here
+    if search_location == None:
+        pass
+    #case 2: if there's a location and it's already validated -> Nothing to do here
+    elif search_location != None and validation_status == 'validated':
+        pass
+    #case 3: if there's a location and it's NOT validated (pending_validation) -> Validate
+    elif search_location != None and validation_status == 'pending_validation':
+        from app.services.geolocation.location_verifier import verify_location
+        try:
+            normalized_location, coordinates = verify_location(search_location)
+            lead.location.lat = coordinates{}
+        except Exception as e:
+            logger.error(f'Found error during location verification: {e}')
+
+    #case 4: if there's a location and the previous validation failed -> Nothing to do, let the query ask for a new location.
+    elif search_location != None and validation_status == 'pending_validation':
+
+    
+
+    
 
 def run_lead_route(state: MyState):
     """Route decision after lead extraction"""
