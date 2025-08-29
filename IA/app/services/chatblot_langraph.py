@@ -118,7 +118,7 @@ def proccess_chat_turn(user_id: str = '', conv_id:str = '', user_message:str = '
     # LOGICA adicional para el frontend
     if final_state in ['other', 'query_user']:
         output_stage = 'extract'
-        output_content = {'model_response': response.get('final_output').get('content')}
+        output_content = {'model_response': response.get('final_output').get('content').get('text')}
     else:
         output_stage = 'recommend'
         output_content = response.get('final_output').get('content').get('properties')
