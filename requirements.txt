@@ -26,3 +26,5 @@ langchain
 langchain-aws
 langgraph
 
+# Geocode
+opencage
