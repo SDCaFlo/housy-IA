@@ -4,12 +4,9 @@ from app.api.chatbot_recovery import router as chat_router
 from app.api.embed_endpoint import router as embed_router
 from fastapi.middleware.cors import CORSMiddleware
 
-
-
-
 app = FastAPI(
     title="Chatbot API",
-    version = "1.0.0",
+    version = "2.0.0",
 )
 
 

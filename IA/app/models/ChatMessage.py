@@ -21,7 +21,7 @@ class UserMessage(BaseModel):
 
 class ChatResponse(BaseModel):
     # model response in str
-    stage: str
+    stage: str = 'non'
     response: Union[str, List, Dict]
 
 class ChatHistoryRequest(BaseModel):

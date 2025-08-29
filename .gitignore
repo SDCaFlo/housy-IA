@@ -31,4 +31,7 @@ dockerfile.lambda
 */data-gen/*
 .gitignore copy
 
+#Tests
+*/test-lab/
+
 
