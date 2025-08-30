@@ -26,5 +26,6 @@ class MyState(BaseModel):
     lead_route_result: Optional[str] | None = None
     query_user_result: Optional[dict] | None = {}
     search_properties_result: Optional[list] | None = None
+    location_verification_result: Optional[dict] | None = {}
     other_result: Optional[str] | None = None
     final_output: Optional[dict] = None
