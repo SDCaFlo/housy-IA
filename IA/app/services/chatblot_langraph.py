@@ -52,6 +52,7 @@ def proccess_chat_turn(user_id: str = '', conv_id:str = '', user_message:str = '
     workflow.add_node("search_properties", run_search_properties)
     workflow.add_node("new_search", run_new_search)
     workflow.add_node("format_output", run_format_output)
+    workflow.add_node("verify_location", run_verify_location)
 
     # conditionals
     workflow.add_conditional_edges(
@@ -69,7 +70,8 @@ def proccess_chat_turn(user_id: str = '', conv_id:str = '', user_message:str = '
 
     # Node Connections
     workflow.set_entry_point("input_router")
-    workflow.add_edge("extract", "lead_router")
+    workflow.add_edge("extract", "verify_location")
+    workflow.add_edge("verify_location", "lead_router")
     workflow.add_edge("new_search", "extract")
     workflow.add_edge("other", "format_output")
     workflow.add_edge("query_user", "format_output")
@@ -128,7 +130,10 @@ def proccess_chat_turn(user_id: str = '', conv_id:str = '', user_message:str = '
     else:
         return output_stage, output_content
 
-# Node Function Definition
+
+
+
+################################# Node Function Definition ################################
 def run_input_route(state: MyState):
     """Input Router"""
     logger.info('Routing')
@@ -182,9 +187,41 @@ def run_extract(state: MyState):
     state.current_state_flow.append('extract')
     return state
 
+def run_verify_location(state: MyState):
+    """Verify the location in the lead"""    
+    lead: PropertySearchParams = state.extract_result.get('merged_lead')
+    search_location:str = lead.location.value
+    validation_status = lead.location.state.value
+
+    #case 1: if there's no location inside the lead -> Nothing to do here
+    if search_location == None:
+        state.location_verification_result["result"] = 'skipped: empty value' 
+    #case 2: if there's a location and it's already validated -> Nothing to do here
+    elif search_location != None and validation_status == 'validated':
+        state.location_verification_result["result"] = 'skipped: already validated' 
+    #case 3: if there's a location and it's NOT validated (pending_validation) -> Validate
+    elif search_location != None and validation_status == 'pending_validation':
+        from app.services.geolocation.location_verifier import verify_location
+        try:
+            _, coordinates = verify_location(search_location.lower())
+            lead.location.lat = coordinates.get('lat')
+            lead.location.lon = coordinates.get('lon')
+            state.location_verification_result["result"] = 'validation process completed'
+        except Exception as e:
+            state.location_verification_result["result"] = f'error {e}'
+            lead.location.lat = 999
+            lead.location.lon = 999
+            logger.error(f'Found error during location verification: {e}')
+
+    #case 4: if there's a location and the previous validation failed -> Nothing to do, let the query ask for a new location.
+    elif search_location != None and validation_status == 'validation_failed':
+        state.location_verification_result["result"] = 'skipped: previous validation failed. no change.' 
+
+    return state    
+
 def run_lead_route(state: MyState):
     """Route decision after lead extraction"""
-    lead = state.extract_result.get('merged_lead')
+    lead: PropertySearchParams = state.extract_result.get('merged_lead')
     last_state = state.input_state.get('input_state')
     last_state_count = state.input_state.get('state_count')
 
@@ -192,7 +229,7 @@ def run_lead_route(state: MyState):
     if lead.verify_lead() == False:
         state.lead_route_result = 'query_user'
     else:
-        if last_state == 'refine' and  last_state_count <2:
+        if last_state == 'query_user' and  last_state_count <2:
             state.lead_route_result = 'query_user'
         else:
             state.lead_route_result = 'search_properties'
@@ -206,8 +243,7 @@ def run_query_user(state: MyState):
     lead: PropertySearchParams = state.extract_result.get('merged_lead')
     
     #1. obtemos información para el prompt
-    missing_values = str(lead.get_params_description(missing=True)).replace('{','{{').replace('}','}}')
-    present_values = str(lead.get_params_description(missing=False)).replace('{','{{').replace('}','}}')
+    query_instructions = lead.format_query_instructions()
 
     #2. Obtenemos cadena.
     chain = get_query_user_chain()
@@ -215,11 +251,11 @@ def run_query_user(state: MyState):
     #3. Invocamos cadena.
     result = chain.invoke({
         "message_history": chat_history,
-        "missing_values": missing_values,
-        "present_values": present_values,
+        "query_instructions": query_instructions,
         "input": state.user_message
     })
 
+    state.query_user_result["query_instructions"] = query_instructions
     state.query_user_result["llm_raw_output"] = result
     state.query_user_result["user_query_output"] = result.model_dump().get('content', 'error')
     state.current_state_flow.append('query_user')
@@ -230,7 +266,7 @@ def run_search_properties(state: MyState)->list:
     from app.services.embeddings.search_opensearch import search_similar_properties
     try:
         logger.info('property_search: Starting')
-        query = state.extract_result['merged_lead'].to_opensearch_query_knn_filtered(query_size = 5)
+        query = state.extract_result['merged_lead'].to_opensearch_query(query_size = 5, max_distance=15)
         recommendations = search_similar_properties(query)
         state.search_properties_result = recommendations
     except Exception as e:

@@ -26,3 +26,8 @@ langchain
 langchain-aws
 langgraph
 
+# Geocode
+opencage
+
+# others
+rapidfuzz

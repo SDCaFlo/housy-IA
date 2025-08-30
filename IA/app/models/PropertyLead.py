@@ -13,6 +13,7 @@ class SlotState(str, Enum):
     MISSING = 'missing'
     PENDING_VALIDATION = 'pending_validation'
     VALIDATED = 'validated'
+    VALIDATION_FAILED = 'validation_failed'
 
 
 class PropertyType(str, Enum):
@@ -59,14 +60,26 @@ class LocationSlot(Slot):
     lon: Optional[float] = None
     lat: Optional[float] = None
 
+    
     @computed_field  
     def state(self) -> SlotState:
         if self.lon is not None:
-            return SlotState.VALIDATED
+            if self.lon >= 999:
+                return SlotState.VALIDATION_FAILED
+            else:
+                return SlotState.VALIDATED
         elif self.value is not None:
             return SlotState.PENDING_VALIDATION
         else:
             return SlotState.MISSING
+        
+    def merge_with(self, other: 'LocationSlot') -> 'LocationSlot':
+        if other.value is None:
+            return self
+        else:
+            self.value = other.value
+            self.lat = None
+            self.lon = None
 
 class Range(BaseModel, Generic[T]):
     """Rango numérico con mínimo y máximo"""
@@ -104,15 +117,14 @@ class PropertySearchParams(BaseModel):
         default_factory= lambda: Slot[List[PropertyType]](value=None, required=True),
         description=
         'Objeto Slot que contiene: '
-        'value: lista de tipos de propiedades (Ejemplo: ["departamento", "casa"]), '
+        'value: Lista de tipos de propiedades (Ejemplo: ["departamento", "casa"]), '
     )
     
     operation_types: Optional[Slot[OperationType]] = Field(
         default_factory= lambda: Slot[OperationType](value=None, required=True),
         description=
         'Objeto Slot que contiene: '
-        'value: Tipo de operación a realizar con la propiedad: Ejemplo: "alquiler"'
-
+        'value: Tipo de operacion que el usuario quiere realizar (¿comprar o alquilar?): Ejemplo: "alquiler" "'
     )
 
     location: Optional[LocationSlot] = Field(
@@ -137,7 +149,7 @@ class PropertySearchParams(BaseModel):
     )
 
     bedroom_quantity: Optional[Slot[int]] = Field(
-        default_factory= lambda: Slot[Range[int]](value=None, required=False),
+        default_factory= lambda: Slot[int](value=None, required=False),
         description=
         'Objeto Slot que contiene: '
         'value: Cantidad de habitaciones deseadas, Ejemplo: 3'
@@ -160,8 +172,9 @@ class PropertySearchParams(BaseModel):
     
     def verify_lead(self)-> bool:
         """Verifica si el objeto cumple lo mínimo requerido para realizar una búsqueda"""
+        param: Slot
         for param in vars(self).values():
-            if param.required == True and str(param.state) == 'SlotState.MISSING':
+            if param.required == True and param.state.value in ['missing', 'pending_validation', 'validation_failed']:
                 return False
         else:
             return True
@@ -182,26 +195,33 @@ class PropertySearchParams(BaseModel):
             logging.info(f"Embedding service error: Failed to embed text: {e}")
             return []
         
-    def get_params_description(self, missing: bool = False)->dict:
-        """Returns a list of the missing parameters"""
-                
-        if missing == True:
-            missing_values = [key for key, value in vars(self).items() if value.value is None]
-            missing_values_dict = dict()
-            for item in missing_values: 
-                missing_values_dict[item] = {'description': PropertySearchParams.model_fields.get(item).description,
-                                    'required': getattr(self, item).required}
-            return missing_values_dict
-        else:
-            present_values = [key for key, value in vars(self).items() if value.value is not None]
-            present_values_dict = dict()
-            for item in present_values: 
-                present_values_dict[item] = {'description': PropertySearchParams.model_fields.get(item).description,
-                                    'value': getattr(self, item).value}
-            return present_values_dict
+    def format_query_instructions(self)->dict:
+        """Returns a list of the missing parameters"""        
+        missing_values = [key for key, value in vars(self).items() if value.state.value in ['missing', 'validation_failed']]
 
+        query_list = []
+
+        # missing parameters
+        for parameter in missing_values:
+            text = f'{parameter}: {PropertySearchParams.model_fields.get(parameter).description.strip("Objeto Slot que contiene: value:")}'
+            if getattr(self, parameter).required == True:
+                query_list.insert(0, '- REQUERIDO!: ' + text)
+            else:
+                query_list.append('- ' + text)        
         
-    def to_opensearch_query(self, query_size: int = 3, debug: bool = False):
+        # failed location validation
+        if self.location.state.value == 'validation_failed':
+            location = self.location.value
+            query_list.insert(0, f'- URGENTE!: location: La ubicación {location} no pudo ser validada, solicitar mayor precisión al usuario.')
+
+        if query_list == []:
+            output_text = '- No hay valores faltantes'
+        else:
+            output_text = '\n'.join(query_list)
+
+        return output_text
+        
+    def to_opensearch_query(self, query_size: int = 3, max_distance: int = 5, debug: bool = False):
         """
         Reglas:
             1. Bloques Must: Filtra y suma al score
@@ -230,9 +250,37 @@ class PropertySearchParams(BaseModel):
         # if self.price.value.max:
         #     filter.append({"range": {"price": {"lte" : self.price.value.max}}})
         
+        #geolocalización. Filtro.
+        if self.location.value:
+            filter.append({
+                "geo_distance": {
+                    "distance": f"{max_distance}km",
+                    "geolocation": {
+                        "lat": self.location.lat,
+                        "lon": self.location.lon
+                    }
+                }
+            })
+        
         # bloques should
         should = []
+
+
         functions = []
+        # Funcion de decaimiento por geolocalizacion.
+        if self.location.value:
+            functions.append({
+                "gauss": {
+                    "geolocation": {
+                        "origin": {"lat": self.location.lat, "lon": self.location.lon},
+                        "scale": "2km",    # Distancia donde el score empieza a decaer
+                        "offset": "0km",   # Distancia sin penalización  
+                        "decay": 0.5       # Factor de decaimiento
+                    }
+                },
+                "weight": 2.0  # Peso alto para priorizar cercanía
+            })
+        # Funcion decaimiento precio
         if self.price.value:
             price_reference = self.price.value
             functions.append({
@@ -241,6 +289,7 @@ class PropertySearchParams(BaseModel):
                     },
                 "weight": 1.0
             })
+        # Funcion decaimiento cantidad de habitaciones
         if self.bedroom_quantity.value:
             functions.append({
                 "gauss": {
@@ -248,6 +297,7 @@ class PropertySearchParams(BaseModel):
                 },
                 "weight": 1.0
             })
+        # Funcion decaimiento cantidad de baños
         if self.bathroom_quantity.value:
             functions.append({
                 "gauss": {
@@ -255,13 +305,13 @@ class PropertySearchParams(BaseModel):
                 },
                 "weight": 0.8
             })
-            
+        
         if functions:
             should.append({
                 "function_score": {
                     "query": {"match_all": {}},
                     "functions": functions,
-                    "score_mode": "sum"  # Peso menos importante para baños
+                    "score_mode": "sum" 
                 }
             })
 
