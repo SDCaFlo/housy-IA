@@ -28,9 +28,6 @@ langgraph
 
 # Geocode
 opencage
-<<<<<<< HEAD
 
 # others
 rapidfuzz
-=======
->>>>>>> 57991c61b39b827f8bee09e088c2a5470bd2faae
