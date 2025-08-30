@@ -1,5 +1,4 @@
 from rapidfuzz import process,fuzz
-from typing import Tuple
 
 location_catalog = location_catalog = {
  'ancon': {'lat': -11.7750, 'lon':-77.1750},
