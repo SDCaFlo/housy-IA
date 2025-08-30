@@ -28,3 +28,6 @@ langgraph
 
 # Geocode
 opencage
+
+# others
+rapidfuzz
