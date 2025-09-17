@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="Chatbot API",
-    version = "2.0.0",
+    version="2.0.0",
 )
 
 
@@ -23,15 +23,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # healthcheck
 @app.get("/")
 def root():
     return {"status": "ok"}
 
+
 # Incluye la ruta de los archivos  api/routes.py
-app.include_router(router, prefix='/chatbot')
-app.include_router(chat_router, prefix='/chat_history')
-app.include_router(embed_router, prefix='/embed_service')
+app.include_router(router, prefix="/chatbot")
+app.include_router(chat_router, prefix="/chat_history")
+app.include_router(embed_router, prefix="/embed_service")
 
 
 # References: https://apidog.com/articles/how-to-use-fastapi-apirouter/

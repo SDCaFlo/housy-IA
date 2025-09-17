@@ -1,10 +1,10 @@
 import os
 import sys
 import time
-project_root = os.path.abspath(os.path.join(os.getcwd(), '.'))
-print(f'project root: {project_root}')
-sys.path.append(project_root)
 
+project_root = os.path.abspath(os.path.join(os.getcwd(), "."))
+print(f"project root: {project_root}")
+sys.path.append(project_root)
 import psycopg2
 from dotenv import load_dotenv
 from opensearchpy.helpers import bulk
@@ -20,7 +20,7 @@ conn = psycopg2.connect(
     port=os.getenv("POSTGRESQL_PORT"),
     user=os.getenv("POSTGRESQL_DEV_USER"),
     password=os.getenv("POSTGRESQL_DEV_PASSWORD"),
-    database=os.getenv("POSTGRESQL_DEV_DB")
+    database=os.getenv("POSTGRESQL_DEV_DB"),
 )
 cursor = conn.cursor()
 
@@ -29,8 +29,8 @@ client = get_opensearch_client()
 
 INDEX_NAME = os.getenv("OPENSEARCH_INDEX", "properties")
 
-def create_index_if_not_exists():
 
+def create_index_if_not_exists():
     if client.indices.exists(index=INDEX_NAME):
         print(f"Eliminando índice existente: {INDEX_NAME}")
         client.indices.delete(index=INDEX_NAME)
@@ -43,31 +43,28 @@ def create_index_if_not_exists():
                 "settings": {"index": {"knn": True}},
                 "mappings": {
                     "properties": {
-                        "property_id" : {"type": "keyword"},
+                        "property_id": {"type": "keyword"},
                         "title": {"type": "text"},
-                        "unified_description" : {"type": "text"},
-                        "description_embedding": {"type": "knn_vector", "dimension": 1536},
-                        "price": {"type": "double"},                        
-                        "geolocation": { "type": "geo_point"},
-                        "address": {"type": "text"},
-                        "property_type" : {"type": "keyword"},
-                        "operation_type": { "type": "keyword" },
-                        "status": { "type": "keyword" },
-                        "location": { "type": "keyword" },
-                        "space_count_by_type": {
-                        "type": "object",
-                        "dynamic": True
+                        "unified_description": {"type": "text"},
+                        "description_embedding": {
+                            "type": "knn_vector",
+                            "dimension": 1536,
                         },
+                        "price": {"type": "double"},
+                        "geolocation": {"type": "geo_point"},
+                        "address": {"type": "text"},
+                        "property_type": {"type": "keyword"},
+                        "operation_type": {"type": "keyword"},
+                        "status": {"type": "keyword"},
+                        "location": {"type": "keyword"},
+                        "space_count_by_type": {"type": "object", "dynamic": True},
                         "_audit_date": {"type": "date"},
                         "_indexed_at": {"type": "date"},
-                        "_operation": { "type": "text"}              
+                        "_operation": {"type": "text"},
                     }
-                }
-            }
-
+                },
+            },
         )
-
-
 
 
 def index_properties_from_view(batch_size=50):
@@ -79,7 +76,7 @@ def index_properties_from_view(batch_size=50):
 
     batch = []
     processed = 0
-    
+
     print("Iniciando indexacion")
 
     while True:
@@ -88,9 +85,8 @@ def index_properties_from_view(batch_size=50):
         if not rows:
             break
 
-
         for index, row in enumerate(rows):
-            print(f'procesando fila {index}')
+            print(f"procesando fila {index}")
             doc = dict(zip(column_names, row))
 
             # Asegurarse que title y description existan
@@ -100,7 +96,9 @@ def index_properties_from_view(batch_size=50):
             location = doc.get("location") or ""
 
             # Generar vectores
-            description_embedding = embed_text(title + " " + desc + " " + location + " " + address)
+            description_embedding = embed_text(
+                title + " " + desc + " " + location + " " + address
+            )
 
             # Documento para OpenSearch
             os_doc = {
@@ -109,35 +107,34 @@ def index_properties_from_view(batch_size=50):
                 "unified_description": desc,
                 "description_embedding": description_embedding,
                 "price": float(doc.get("price") or 0),
-                
                 # geolocalizacion
                 "geolocation": {
                     "lat": float(doc.get("latitude") or 0),
-                    "lon": float(doc.get("longitude") or 0)
+                    "lon": float(doc.get("longitude") or 0),
                 },
-
                 "address": address,
-                "property_type" : doc.get("property_type"),
+                "property_type": doc.get("property_type"),
                 "operation_type": doc.get("operation_type"),
                 "status": doc.get("status"),
                 "location": location,
                 "space_count_by_type": doc.get("space_count_by_type"),
                 "_operation": "new",
-                "_indexed_at": time.strftime('%Y-%m-%dT%H:%M:%SZ')
+                "_indexed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
-            
-            batch.append({
-                "_index": INDEX_NAME,
-                "_id": str(doc.get("property_id")),
-                "_source": os_doc
-            })
+
+            batch.append(
+                {
+                    "_index": INDEX_NAME,
+                    "_id": str(doc.get("property_id")),
+                    "_source": os_doc,
+                }
+            )
 
         if batch:
             success, _ = bulk(client, batch)
             processed += success
             print(f"Indexados: {processed} documentos")
             batch.clear()
-
 
 
 # Crear índice si no existe
