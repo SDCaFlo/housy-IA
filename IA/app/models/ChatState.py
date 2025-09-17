@@ -11,7 +11,13 @@ class InputRouter(str, Enum):
     extract = "extract"
     new_search = "new_search"
     other = "other"
+    small_talk = "small_talk"
 
+class InputRouterDescription(str, Enum):
+    extract = Field("extract", description="Para análisis, extracción y/o procesamiento de información específica. Si el cliente se encuentra aportando información o confirmandola.")
+    new_search = Field("new_search", description="Sólo cuando el cliente indica explícitamente que quiere comenzar la búsqueda desde 0 (Borra todo el historial)")
+    other = Field("other", description="Si no se trata de un tema asociado a búsquedas inmobiliarias")
+    small_talk = Field("small_talk", description="Para saludos, cortesías, agradecimientos, despedidas, confirmaciones simples SIN contexto relevante, etc")
 
 class ContentTypeMapping(str, Enum):
     """Mapping para tipo de contenido en base al final output"""

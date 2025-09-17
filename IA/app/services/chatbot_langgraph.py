@@ -4,8 +4,9 @@ from app.models.ChatState import MyState, ContentTypeMapping, InputRouter
 from typing import List
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
-from app.services.stages.router_llm import get_route_chain, get_route_chain_v2
-from app.services.stages.extract_chain import get_extract_chain
+from .stages.router_llm import get_route_chain
+from .stages.extract_chain import get_extract_chain
+from .stages.small_talk import run_small_talk
 import json
 import logging
 
@@ -53,9 +54,10 @@ def proccess_chat_turn(
     workflow = StateGraph(MyState)
 
     # Node Creation
-    workflow.add_node("input_router", run_input_route_v2)  # Testing
+    workflow.add_node("input_router", run_input_route) # <-- Needs Modification
     workflow.add_node("extract", run_extract)
     workflow.add_node("other", run_other)
+    workflow.add_node("small_talk", run_small_talk) # <-- Currently implementing
     workflow.add_node("lead_router", run_lead_route)
     workflow.add_node("query_user", run_query_user)
     workflow.add_node("search_properties", run_search_properties)
@@ -69,7 +71,7 @@ def proccess_chat_turn(
         lambda x: x.input_route_result[
             "input_route_decision"
         ],  # función que retorna el nombre del siguiente nodo
-        {"extract": "extract", "other": "other", "new_search": "new_search"},
+        {"extract": "extract", "other": "other", "new_search": "new_search", "small_talk": "small_talk"},
     )
 
     workflow.add_conditional_edges(
@@ -84,6 +86,7 @@ def proccess_chat_turn(
     workflow.add_edge("verify_location", "lead_router")
     workflow.add_edge("new_search", "extract")
     workflow.add_edge("other", "format_output")
+    workflow.add_edge("small_talk", "format_output")
     workflow.add_edge("query_user", "format_output")
     workflow.add_edge("search_properties", "format_output")
     # workflow.set_finish_point("extract")
@@ -146,44 +149,23 @@ def proccess_chat_turn(
 
 ################################# Node Function Definition ################################
 def run_input_route(state: MyState):
-    """Input Router"""
-    logger.info("Routing")
-    result = get_route_chain().invoke(
-        {
-            "entities": str(json.dumps(state.input_lead.model_dump()))
-            .replace("{", "{{")
-            .replace("}", "}}"),
-            "input_state": str(state.input_state).replace("{", "{{").replace("}", "}}"),
-            "input": state.user_message,
-            "message_history": state.message_history,
-        }
-    )
-    state.input_route_result["llm_raw_output"] = result
-    state.input_route_result["input_route_decision"] = result.model_dump().get(
-        "content", "error"
-    )
-    state.current_state_flow.append(state.input_state.get("input_state"))
-    return state
-
-
-def run_input_route_v2(state: MyState):
     """Input Router w/ EnumOutputParser"""
     logger.info("Routing")
     try:
-        result = get_route_chain_v2().invoke(
+        result = get_route_chain().invoke(
             {
-                "entities": str(json.dumps(state.input_lead.model_dump()))
-                .replace("{", "{{")
-                .replace("}", "}}"),
                 "input_state": str(state.input_state)
                 .replace("{", "{{")
-                .replace("}", "}}"),
-                "user_message": state.user_message,
+                .replace("}", "}}"), # pasamos el input state (reemplazar por flag a futuro)
+                "message_context": str([(x.type, x.content) for x in state.message_history[-3::1]])
+                .replace("),","),\n")
+                .replace("{", "{{")
+                .replace("}", "}}"), # pasamos los últimos 3 mensajes formateados
             }
         )
-    except Exception:
-        logger.error('route_v2: Failed to parse a valid route. Defaulting to "extract"')
-        result = InputRouter.extract
+    except Exception as e:
+        logger.error(f'route_v2: Failed to parse a valid route. Defaulting to "small_talk". Detail: {e}')
+        result = InputRouter.small_talk
     state.input_route_result["input_route_decision"] = result.value
     state.current_state_flow.append(state.input_state.get("input_state"))
     return state
