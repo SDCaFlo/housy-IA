@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.models.ChatMessage import UserMessage, ChatResponse
-from app.services.chatblot_langraph import proccess_chat_turn
+from app.services.chatbot_langgraph import proccess_chat_turn
 #from app.utils.intention_detection import tiene_intencion_busqueda
 #from app.services.embeddings.search_opensearch import search_similar_properties
 
