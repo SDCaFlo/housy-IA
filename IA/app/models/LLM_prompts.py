@@ -1,3 +1,6 @@
+"""Prompts de LLM
+Pendiente buscar una mejor estructura de almacenamiento o versionado con GIT."""
+
 ROUTER_PROMPT_v3 = """
 Eres un enrutador dentro de un sistema de recomendación de propieades inmobiliarias. 
 Responde SOLO con una palabra.

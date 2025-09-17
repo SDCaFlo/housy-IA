@@ -1,3 +1,6 @@
+"""Estructuras para interacción con API.
+Formatos de mensaje de entrada y salida para interactuar con frontend/backend"""
+
 from pydantic import BaseModel
 from typing import Optional, Dict, List, Union, Literal, Any
 

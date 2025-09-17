@@ -1,3 +1,5 @@
+"""Formatos de entrada y salida para el apartado de Embeddings"""
+
 from pydantic import BaseModel
 from typing import List
 

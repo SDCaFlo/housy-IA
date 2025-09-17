@@ -1,3 +1,6 @@
+"""Clase para guardar estado de LangGraph.
+Puntos de mejora posibles"""
+
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from enum import Enum

@@ -1,3 +1,7 @@
+"""Estructura para guardar LEADs.
+Langchain usa pydanticparser para poder transformar el speech de cliente en esta clase
+"""
+
 from pydantic import BaseModel, Field, model_validator, ConfigDict, computed_field
 from app.services.embeddings.bedrock_service import embed_text
 from typing_extensions import Self

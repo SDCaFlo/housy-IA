@@ -1,3 +1,6 @@
+"""Estructura para recuperar, almacenar, modificar y guardar mensajes desde y hacia dynamodb
+Posee métodos para estructurar el historial de mensajes para LangChain y LLMs."""
+
 from app.core.aws_clients import get_dynamodb_client
 from boto3.dynamodb.types import TypeSerializer, TypeDeserializer
 from langchain_core.messages import HumanMessage, AIMessage
