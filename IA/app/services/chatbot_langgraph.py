@@ -6,7 +6,6 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from .stages.router_llm import get_route_chain
 from .stages.extract_chain import get_extract_chain
-from .stages.small_talk import run_small_talk
 import json
 import logging
 
@@ -277,6 +276,32 @@ def run_query_user(state: MyState):
     return state
 
 
+def run_small_talk(state: MyState):
+    """Call LLM and formulates questions for user"""
+    from app.services.stages.query_user_chain import get_small_talk_chain
+
+    chat_history: List[BaseMessage] = state.message_history[-4::]  # para contexto
+    lead: PropertySearchParams = state.extract_result.get("merged_lead")
+
+    # 2. Obtenemos cadena.
+    chain = get_small_talk_chain()
+
+    # 3. Invocamos cadena.
+    result = chain.invoke(
+        {
+            "message_history": chat_history,
+            "input": state.user_message,
+        }
+    )
+
+    state.small_talk_result["llm_raw_output"] = result
+    state.small_talk_result["small_talk_output"] = result.model_dump().get(
+        "content", "error"
+    )
+    state.current_state_flow.append("small_talk")
+    return state
+
+
 def run_search_properties(state: MyState) -> list:
     """Searches properties"""
     from app.services.embeddings.search_opensearch import search_similar_properties
@@ -319,6 +344,8 @@ def run_format_output(state: MyState):
             content = {"text": final_state_response.get("user_query_output")}  # str
         case "search_properties":
             content = {"properties": final_state_response}  # list of properties
+        case "small_talk":
+            content = {"text": final_state_response.get("small_talk_output")} # str
     lead: PropertySearchParams = getattr(state, "extract_result", {}).get(
         "merged_lead", PropertySearchParams()
     )

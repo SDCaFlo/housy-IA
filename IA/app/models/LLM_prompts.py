@@ -1,6 +1,11 @@
 """Prompts de LLM
 Pendiente buscar una mejor estructura de almacenamiento o versionado con GIT."""
 
+
+SMALL_TALK_PROMPT_v1 = """
+Responde a cliente de manera amable y concisa.
+"""
+
 ROUTER_PROMPT_v3 = """
 Eres un enrutador dentro de un sistema de recomendación de propieades inmobiliarias. 
 Responde SOLO con una palabra.
