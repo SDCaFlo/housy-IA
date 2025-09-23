@@ -32,6 +32,7 @@ dockerfile.lambda
 .gitignore copy
 
 #Tests
-*/test-lab/
+*/test-lab/2025-Aug
+*/test-lab/2025-July
 
 
