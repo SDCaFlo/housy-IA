@@ -6,12 +6,10 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from .stages.router_llm import get_route_chain
 from .stages.extract_chain import get_extract_chain
+from .stages.faq_chain import faq_llm_node, faq_retrieve_node
 import json
 import logging
 
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 def proccess_chat_turn(
@@ -25,6 +23,7 @@ def proccess_chat_turn(
     # 1. Recuperar los mensajes históricos.
     # Necesitamos los siguientes datos para nuestro planner:
     # previous_state + message_history + entities .
+    logging.info("Test logger")
 
     chat_history = ChatHistory(user_id, conv_id)
     chat_history.get_messages(
@@ -56,7 +55,9 @@ def proccess_chat_turn(
     workflow.add_node("input_router", run_input_route) # <-- Needs Modification
     workflow.add_node("extract", run_extract)
     workflow.add_node("other", run_other)
-    workflow.add_node("small_talk", run_small_talk) # <-- Currently implementing
+    workflow.add_node("small_talk", run_small_talk)
+    workflow.add_node("faq_retrieve", faq_retrieve_node) # <-- implementing
+    workflow.add_node("faq_llm", faq_llm_node) # <-- implementing
     workflow.add_node("lead_router", run_lead_route)
     workflow.add_node("query_user", run_query_user)
     workflow.add_node("search_properties", run_search_properties)
@@ -70,7 +71,13 @@ def proccess_chat_turn(
         lambda x: x.input_route_result[
             "input_route_decision"
         ],  # función que retorna el nombre del siguiente nodo
-        {"extract": "extract", "other": "other", "new_search": "new_search", "small_talk": "small_talk"},
+        {
+            "extract": "extract", 
+            "other": "other", 
+            "new_search": "new_search", 
+            "small_talk": "small_talk",
+            "faq": "faq_retrieve"
+        }
     )
 
     workflow.add_conditional_edges(
@@ -86,6 +93,8 @@ def proccess_chat_turn(
     workflow.add_edge("new_search", "extract")
     workflow.add_edge("other", "format_output")
     workflow.add_edge("small_talk", "format_output")
+    workflow.add_edge("faq_retrieve", "faq_llm")
+    workflow.add_edge("faq_llm", "format_output")
     workflow.add_edge("query_user", "format_output")
     workflow.add_edge("search_properties", "format_output")
     # workflow.set_finish_point("extract")
@@ -149,7 +158,7 @@ def proccess_chat_turn(
 ################################# Node Function Definition ################################
 def run_input_route(state: MyState):
     """Input Router w/ EnumOutputParser"""
-    logger.info("Routing")
+    logging.info("Routing")
     try:
         result = get_route_chain().invoke(
             {
@@ -163,9 +172,10 @@ def run_input_route(state: MyState):
             }
         )
     except Exception as e:
-        logger.error(f'route_v2: Failed to parse a valid route. Defaulting to "small_talk". Detail: {e}')
+        logging.error(f'route_v2: Failed to parse a valid route. Defaulting to "small_talk". Detail: {e}')
         result = InputRouter.small_talk
     state.input_route_result["input_route_decision"] = result.value
+    logging.info(f"Input Route decision: {result.value}")
     state.current_state_flow.append(state.input_state.get("input_state"))
     return state
 
@@ -217,7 +227,7 @@ def run_verify_location(state: MyState):
             state.location_verification_result["result"] = f"error {e}"
             lead.location.lat = 999
             lead.location.lon = 999
-            logger.error(f"Found error during location verification: {e}")
+            logging.error(f"Found error during location verification: {e}")
 
     # case 4: if there's a location and the previous validation failed -> Nothing to do, let the query ask for a new location.
     elif search_location != None and validation_status == "validation_failed":
@@ -278,14 +288,17 @@ def run_query_user(state: MyState):
 
 def run_small_talk(state: MyState):
     """Call LLM and formulates questions for user"""
-    from app.services.stages.query_user_chain import get_small_talk_chain
-
+    logging.info("Entered route: small_talk")
+    from app.services.stages.small_talk import get_small_talk_chain
+    
+    # 1. Historial
     chat_history: List[BaseMessage] = state.message_history[-4::]  # para contexto
-    lead: PropertySearchParams = state.extract_result.get("merged_lead")
+
 
     # 2. Obtenemos cadena.
     chain = get_small_talk_chain()
 
+    logging.info("Invocando cadena small_talk")
     # 3. Invocamos cadena.
     result = chain.invoke(
         {
@@ -293,6 +306,7 @@ def run_small_talk(state: MyState):
             "input": state.user_message,
         }
     )
+    logging.info("Succeeded invoking small_talk chain")
 
     state.small_talk_result["llm_raw_output"] = result
     state.small_talk_result["small_talk_output"] = result.model_dump().get(
@@ -307,14 +321,14 @@ def run_search_properties(state: MyState) -> list:
     from app.services.embeddings.search_opensearch import search_similar_properties
 
     try:
-        logger.info("property_search: Starting")
+        logging.info("property_search: Starting")
         query = state.extract_result["merged_lead"].to_opensearch_query(
             query_size=5, max_distance=15
         )
         recommendations = search_similar_properties(query)
         state.search_properties_result = recommendations
     except Exception as e:
-        logger.error(f"property_search: Failed. Detail: {e}")
+        logging.error(f"property_search: Failed. Detail: {e}")
         state.search_properties_result = [
             "error",
         ]
@@ -332,31 +346,37 @@ def run_other(state: MyState):
 
 def run_format_output(state: MyState):
     """Formats final output"""
+    try:
+        logging.info("Entered Node: 'format_output'")
+        final_state = state.current_state_flow[-1]
+        content_type = getattr(ContentTypeMapping, final_state).value
+        # final_state_response
+        final_state_response = getattr(state, final_state + "_result")
+        match final_state:
+            case "other":
+                content = {"text": final_state_response}  # str
+            case "query_user":
+                content = {"text": final_state_response.get("user_query_output")}  # str
+            case "search_properties":
+                content = {"properties": final_state_response}  # list of properties
+            case "small_talk":
+                content = {"text": final_state_response.get("small_talk_output")} # str
+            case "faq_llm":
+                content = {"text": final_state_response.get("faq_llm_output")}
+        lead: PropertySearchParams = getattr(state, "extract_result", {}).get(
+            "merged_lead", PropertySearchParams()
+        )
 
-    final_state = state.current_state_flow[-1]
-    content_type = getattr(ContentTypeMapping, final_state).value
-    # final_state_response
-    final_state_response = getattr(state, final_state + "_result")
-    match final_state:
-        case "other":
-            content = {"text": final_state_response}  # str
-        case "query_user":
-            content = {"text": final_state_response.get("user_query_output")}  # str
-        case "search_properties":
-            content = {"properties": final_state_response}  # list of properties
-        case "small_talk":
-            content = {"text": final_state_response.get("small_talk_output")} # str
-    lead: PropertySearchParams = getattr(state, "extract_result", {}).get(
-        "merged_lead", PropertySearchParams()
-    )
+        final_output = {
+            "final_state": final_state,
+            "content_type": content_type,
+            "content": content,
+            "lead": json.dumps(lead.model_dump()),
+        }
 
-    final_output = {
-        "final_state": final_state,
-        "content_type": content_type,
-        "content": content,
-        "lead": json.dumps(lead.model_dump()),
-    }
+        state.final_output = final_output
 
-    state.final_output = final_output
-
-    return state
+        return state
+    except Exception as e:
+        logging.info(f"format output chain error: {e}")
+        return state

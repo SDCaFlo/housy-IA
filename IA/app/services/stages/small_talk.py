@@ -4,9 +4,6 @@ from app.models.LLM_prompts import SMALL_TALK_PROMPT_v1
 from app.core.config import SMALL_TALK_MODEL_ID
 import logging
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
 def get_small_talk_chain():
 
     #1. Definimos el prompt
@@ -20,8 +17,12 @@ def get_small_talk_chain():
     
     # 2. Definimos el modelo
     model_id = SMALL_TALK_MODEL_ID
-    logger.info(f"Query user chain: Model ID: {SMALL_TALK_MODEL_ID}")
-    llm = get_langchain_bedrock_client(model_id=model_id)
+    logging.info(f"small talk user chain: Model ID: {SMALL_TALK_MODEL_ID}")
+    try:
+        llm = get_langchain_bedrock_client(model_id=model_id)
+    except Exception as e:
+        print(e)
+        logging.info(e)
 
     # 3. Creamos cadena y retornamos la misma
     chain = prompt | llm

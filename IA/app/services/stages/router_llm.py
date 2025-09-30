@@ -1,6 +1,6 @@
 from app.core.aws_clients import get_langchain_bedrock_client
 from app.models.PropertyLead import PropertySearchParams
-from app.models.ChatState import InputRouter, InputRouterDescription
+from app.models.ChatState import InputRouter, route_descriptions
 from app.core.config import ROUTER_MODEL_ID
 from app.models.LLM_prompts import ROUTER_PROMPT, ROUTER_PROMPT_v4
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
@@ -59,8 +59,7 @@ class LlmRouter:
 
 def get_route_chain():
     parser = EnumOutputParser(enum=InputRouter)
-    parser2 = EnumOutputParser(enum=InputRouterDescription)
-    format_instructions = parser2.get_format_instructions()
+    format_instructions = "\n".join(route_descriptions.values())
 
     prompt = PromptTemplate(
         template=ROUTER_PROMPT_v4,
