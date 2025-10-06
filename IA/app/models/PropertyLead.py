@@ -573,3 +573,169 @@ class PropertySearchParams(BaseModel):
             item.pop("required")
             item.pop("state")
         return json.dumps(lead_dict)
+
+    ##### Test #####
+    def test_query(
+        self, query_size: int = 3, max_distance: int = 5, debug: bool = False
+        ):
+
+        # bloques must
+        must = []
+
+        must.append({"term": {"status": "test"}})
+        if self.operation_types.value:
+            must.append({"term": {"operation_type": self.operation_types.value.value}})
+        if self.property_types.value:
+            must.append(
+                {
+                    "terms": {
+                        "property_type": [
+                            val.value for val in self.property_types.value
+                        ]
+                    }
+                }
+            )
+
+        # bloques filter
+        filter = []
+        # if self.price.value.max:
+        #     filter.append({"range": {"price": {"lte" : self.price.value.max}}})
+
+        # geolocalización. Filtro.
+        if self.location.value:
+            filter.append(
+                {
+                    "geo_distance": {
+                        "distance": f"{max_distance}km",
+                        "geolocation": {
+                            "lat": self.location.lat,
+                            "lon": self.location.lon,
+                        },
+                    }
+                }
+            )
+
+        # bloques should
+        should = []
+
+        functions = []
+        # Funcion de decaimiento por geolocalizacion.
+        if self.location.value:
+            functions.append(
+                {
+                    "gauss": {
+                        "geolocation": {
+                            "origin": {
+                                "lat": self.location.lat,
+                                "lon": self.location.lon,
+                            },
+                            "scale": "2km",  # Distancia donde el score empieza a decaer
+                            "offset": "0km",  # Distancia sin penalización
+                            "decay": 0.5,  # Factor de decaimiento
+                        }
+                    },
+                    "weight": 2.0,  # Peso alto para priorizar cercanía
+                }
+            )
+        # Funcion decaimiento precio
+        # if self.price.value:
+        #     price_reference = self.price.value
+        #     functions.append(
+        #         {
+        #             "gauss": {
+        #                 "price": {
+        #                     "origin": price_reference,
+        #                     "scale": max(price_reference * 0.1, 1),
+        #                     "decay": 0.5,
+        #                 }
+        #             },
+        #             "weight": 1.0,
+        #         }
+        #     )
+        # Funcion decaimiento cantidad de habitaciones
+        # if self.bedroom_quantity.value:
+        #     functions.append(
+        #         {
+        #             "gauss": {
+        #                 "space_count_by_type.Dormitorio": {
+        #                     "origin": self.bedroom_quantity.value,
+        #                     "scale": 1,
+        #                     "decay": 0.5,
+        #                 }  # ±1 habitación = decay 0.5
+        #             },
+        #             "weight": 1.0,
+        #         }
+        #     )
+        # # Funcion decaimiento cantidad de baños
+        # if self.bathroom_quantity.value:
+        #     functions.append(
+        #         {
+        #             "gauss": {
+        #                 "space_count_by_type.Baño": {
+        #                     "origin": self.bathroom_quantity.value,
+        #                     "scale": 1,
+        #                     "decay": 0.5,
+        #                 }
+        #             },
+        #             "weight": 0.8,
+        #         }
+        #     )
+
+        if functions:
+            should.append(
+                {
+                    "function_score": {
+                        "query": {"match_all": {}},
+                        "functions": functions,
+                        "score_mode": "sum",
+                    }
+                }
+            )
+
+        # ## Embeding
+        # embbeding = self.generate_embedding()
+        # should.append(
+        #     {
+        #         "knn": {
+        #             "description_embedding": {
+        #                 "vector": embbeding,
+        #                 "k": 100,
+        #                 "boost": 15.0,
+        #             }
+        #         }
+        #     }
+        # )
+
+        # # location
+        # should.append(
+        #     {
+        #         "multi_match": {
+        #             "query": self.location.value,  # Tu texto de búsqueda
+        #             "fields": ["address", "unified_description", "title", "location"],
+        #             "boost": 5.0,
+        #             "type": "most_fields",
+        #             "fuzziness": "AUTO",
+        #         }
+        #     }
+        # )
+
+        # query construction
+        bool = dict()
+        if must:
+            bool["must"] = must
+        if filter:
+            bool["filter"] = filter
+        if should:
+            bool["should"] = should
+
+        query = {
+            "size": query_size,
+            "query": {"bool": {**bool, "minimum_should_match": 1}},
+        }
+
+        if debug:
+            query["explain"] = True  # Explica cómo se calculó cada score
+            query["_source"] = True
+            query["highlight"] = {"fields": {"description": {}}}
+
+        return query
