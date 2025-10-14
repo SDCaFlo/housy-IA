@@ -200,6 +200,44 @@ def run_extract(state: MyState):
     return state
 
 
+# def run_verify_location(state: MyState):
+#     """Verify the location in the lead"""
+#     lead: PropertySearchParams = state.extract_result.get("merged_lead")
+#     search_location: str = lead.location.value
+#     validation_status = lead.location.state.value
+
+#     # case 1: if there's no location inside the lead -> Nothing to do here
+#     if search_location == None:
+#         state.location_verification_result["result"] = "skipped: empty value"
+#     # case 2: if there's a location and it's already validated -> Nothing to do here
+#     elif search_location != None and validation_status == "validated":
+#         state.location_verification_result["result"] = "skipped: already validated"
+#     # case 3: if there's a location and it's NOT validated (pending_validation) -> Validate
+#     elif search_location != None and validation_status == "pending_validation":
+#         from app.services.geolocation.location_verifier import verify_location
+
+#         try:
+#             _, coordinates = verify_location(search_location.lower())
+#             lead.location.lat = coordinates.get("lat")
+#             lead.location.lon = coordinates.get("lon")
+#             state.location_verification_result["result"] = (
+#                 "validation process completed"
+#             )
+#         except Exception as e:
+#             state.location_verification_result["result"] = f"error {e}"
+#             lead.location.lat = 999
+#             lead.location.lon = 999
+#             logging.error(f"Found error during location verification: {e}")
+
+#     # case 4: if there's a location and the previous validation failed -> Nothing to do, let the query ask for a new location.
+#     elif search_location != None and validation_status == "validation_failed":
+#         state.location_verification_result["result"] = (
+#             "skipped: previous validation failed. no change."
+#         )
+
+#     return state
+
+
 def run_verify_location(state: MyState):
     """Verify the location in the lead"""
     lead: PropertySearchParams = state.extract_result.get("merged_lead")
@@ -215,26 +253,17 @@ def run_verify_location(state: MyState):
     # case 3: if there's a location and it's NOT validated (pending_validation) -> Validate
     elif search_location != None and validation_status == "pending_validation":
         from app.services.geolocation.location_verifier import verify_location
-
         try:
-            _, coordinates = verify_location(search_location.lower())
-            lead.location.lat = coordinates.get("lat")
-            lead.location.lon = coordinates.get("lon")
-            state.location_verification_result["result"] = (
-                "validation process completed"
-            )
+            _, geometry = verify_location(search_location.lower())
+            lead.location.geom = geometry
+            state.location_verification_result["result"] = "validation process completed"
         except Exception as e:
-            state.location_verification_result["result"] = f"error {e}"
-            lead.location.lat = 999
-            lead.location.lon = 999
-            logging.error(f"Found error during location verification: {e}")
-
+            state.location_verification_result["result"] = "validation Failed"
+            lead.location.geom = [999,]
     # case 4: if there's a location and the previous validation failed -> Nothing to do, let the query ask for a new location.
     elif search_location != None and validation_status == "validation_failed":
-        state.location_verification_result["result"] = (
-            "skipped: previous validation failed. no change."
-        )
-
+        state.location_verification_result["result"] = "skipped: previous validation failed. no change."
+    
     return state
 
 

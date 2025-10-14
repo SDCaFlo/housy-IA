@@ -70,13 +70,14 @@ class Slot(BaseModel, Generic[T]):
 class LocationSlot(Slot):
     value: Optional[str] = None
     required: bool = True
-    lon: Optional[float] = None
-    lat: Optional[float] = None
+    #lon: Optional[float] = None
+    #lat: Optional[float] = None
+    geom: Optional[list] = None
 
     @computed_field
     def state(self) -> SlotState:
-        if self.lon is not None:
-            if self.lon >= 999:
+        if self.geom is not None:
+            if self.geom == [999,]:
                 return SlotState.VALIDATION_FAILED
             else:
                 return SlotState.VALIDATED
@@ -90,8 +91,7 @@ class LocationSlot(Slot):
             return self
         else:
             self.value = other.value
-            self.lat = None
-            self.lon = None
+            self.geom = None
 
 
 class Range(BaseModel, Generic[T]):
