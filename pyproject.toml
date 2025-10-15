@@ -1,0 +1,30 @@
+[project]
+name = "housy-ia"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10.13"
+dependencies = [
+    "boto3>=1.40.32", # aws
+    "botocore>=1.40.32", # aws
+    "fastapi>=0.116.2", # rest-api
+    "langchain>=0.3.27", # LLM-Framework
+    "langchain-aws>=0.2.33", # LLM-Framework
+    "langchain-community>=0.3.30",
+    "langchain-postgres>=0.0.15",
+    "langgraph>=0.6.7", # LLM-Framework
+    "mypy-boto3-bedrock-runtime>=1.40.21", #aws
+    "opencage>=3.2.0", # geolocation
+    "opensearch-py>=3.0.0", # aws-opensearch
+    "psycopg[binary]>=3.2.10",
+    "psycopg2-binary>=2.9.10", # SQL connector
+    "pydantic>=2.11.9", # strong-typed classes
+    "python-dotenv>=1.1.1", # load environment variables
+    "rapidfuzz>=3.14.1", # fuzzy-wuzzy , LLM
+    "requests>=2.32.5", # rest-apis
+    "sqlalchemy>=2.0.43", # SQL connector
+    "starlette>=0.48.0", # web stuff
+    "uvicorn[standard]>=0.35.0", # web runner
+    "geopandas>=1.1.1",
+    "matplotlib>=3.10.6",
+]

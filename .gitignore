@@ -1,0 +1,38 @@
+# Entornos virtuales
+venv/
+.venv/
+ia-env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+__init__*
+
+# Archivos temporales
+*.log
+*.sqlite3
+*.DS_Store
+
+# Datos locales
+*.csv
+*.json
+*.env
+*.dev
+.docker*
+
+# Otros
+.idea/
+.vscode/
+dockerfile.lambda
+
+#data-gen-files
+*/data-gen/*
+.gitignore copy
+
+#Tests
+*/test-lab/2025-Aug
+*/test-lab/2025-July
+
+
