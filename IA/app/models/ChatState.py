@@ -21,13 +21,42 @@ class InputRouter(str, Enum):
 #     small_talk = Field("small_talk", description="Para saludos, cortesías, agradecimientos, despedidas, confirmaciones simples SIN contexto relevante, etc")
 #     faq = Field("faq", description="Para preguntas sobre el servicio tales como cobertura, funcionamiento, recomendaciones de servicios, asociados a la búsqueda inmobiliaria.")
 
+
 route_descriptions = {
-    InputRouter.extract: "extract – extraer o procesar datos ya proporcionados.",
-    InputRouter.new_search: "new_search – el usuario indica explícitamente que quiere comenzar la búsqueda desde cero.",
-    InputRouter.small_talk: "small_talk – saludos o cortesías sin intención.",
-    InputRouter.faq: "faq – preguntas sobre el servicio (cobertura, funcionamiento).",
-    InputRouter.other: "other – cualquier tema fuera del flujo inmobiliario.",
+    InputRouter.extract: """extract: 
+    - Usuario proporciona criterios de búsqueda (ubicación, precio, características)
+    - Usuario responde a preguntas con datos específicos
+    - Usuario modifica o ajusta criterios existentes
+    - Ejemplos: "en San Isidro", "hasta $500k", "con 3 dormitorios", "sí, con jardín"
+    """,
+    
+    InputRouter.new_search: """new_search:
+    - Usuario EXPLÍCITAMENTE pide empezar de cero
+    - Frases como: "nueva búsqueda", "empezar de nuevo", "olvidar lo anterior", "comenzar otra vez"
+    - NO usar para simples cambios de criterios
+    """,
+    
+    InputRouter.small_talk: """small_talk:
+    - Saludos: "hola", "buenos días", "qué tal"
+    - Despedidas: "chau", "gracias", "hasta luego"
+    - Cortesías sin intención: "ok", "entiendo", "perfecto" (SIN contexto previo)
+    - NO usar si hay contexto de búsqueda activa
+    """,
+    
+    InputRouter.faq: """faq:
+    - Preguntas sobre el servicio: "¿qué zonas cubren?", "¿cómo funciona?", "¿cobran comisión?"
+    - Preguntas sobre capacidades del bot
+    - Consultas sobre proceso o políticas
+    """,
+    
+    InputRouter.other: """other:
+    - Temas COMPLETAMENTE fuera del dominio inmobiliario
+    - Ejemplos: recetas de cocina, política, deportes, consejos personales
+    - NO usar para mensajes ambiguos relacionados con inmuebles
+    """
 }
+
+
 
 class ContentTypeMapping(str, Enum):
     """Mapping para tipo de contenido en base al final output"""

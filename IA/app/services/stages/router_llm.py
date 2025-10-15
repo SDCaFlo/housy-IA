@@ -2,7 +2,7 @@ from app.core.aws_clients import get_langchain_bedrock_client
 from app.models.PropertyLead import PropertySearchParams
 from app.models.ChatState import InputRouter, route_descriptions
 from app.core.config import ROUTER_MODEL_ID
-from app.models.LLM_prompts import ROUTER_PROMPT, ROUTER_PROMPT_v4
+from app.models.LLM_prompts import ROUTER_PROMPT, ROUTER_PROMPT_v5
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
 from langchain.output_parsers import EnumOutputParser
 
@@ -59,22 +59,23 @@ class LlmRouter:
 
 def get_route_chain():
     parser = EnumOutputParser(enum=InputRouter)
-    format_instructions = "\n".join(route_descriptions.values())
+    
+    formatted_descriptions = "\n\n".join(
+        f"{route.value}:\n{desc.strip()}" 
+        for route, desc in route_descriptions.items()
+    )
 
     prompt = PromptTemplate(
-        template=ROUTER_PROMPT_v4,
-        input_variables=[
-            # "input_state", "entities",
-            "message_context"
-        ],
+        template=ROUTER_PROMPT_v5,
+        input_variables=["message_context"],
         partial_variables={
-            "route_options": ", ".join([r.value for r in InputRouter]),
-            "format_instructions": format_instructions,
+            "route_descriptions": formatted_descriptions,
+            "format_instructions": parser.get_format_instructions()
         },
     )
 
     llm = get_langchain_bedrock_client(
-        model_id=ROUTER_MODEL_ID, temperature=0.1, max_tokens=20
+        model_id=ROUTER_MODEL_ID, temperature=0.1, max_tokens=50
     )
 
     return prompt | llm | parser

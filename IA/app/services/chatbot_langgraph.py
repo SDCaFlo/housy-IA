@@ -154,28 +154,33 @@ def proccess_chat_turn(
     else:
         return output_stage, output_content
 
-
-################################# Node Function Definition ################################
+###################################################################################################
+################################# Node Function Definition ########################################
+###################################################################################################
 def run_input_route(state: MyState):
     """Input Router w/ EnumOutputParser"""
     logging.info("Routing")
+    chain = get_route_chain()
+    context = {
+        "message_context": str([(x.type, x.content) for x in state.message_history[-3::1]])
+        .replace("),","),\n")
+        .replace("{", "{{")
+        .replace("}", "}}"), # pasamos los últimos 3 mensajes formateados
+    }
     try:
-        result = get_route_chain().invoke(
-            {
-                "input_state": str(state.input_state)
-                .replace("{", "{{")
-                .replace("}", "}}"), # pasamos el input state (reemplazar por flag a futuro)
-                "message_context": str([(x.type, x.content) for x in state.message_history[-3::1]])
-                .replace("),","),\n")
-                .replace("{", "{{")
-                .replace("}", "}}"), # pasamos los últimos 3 mensajes formateados
-            }
-        )
+        # Log the actual prompt
+        logging.info(f"Router context: {context['message_context']}")
+        result = chain.invoke(context)
+        logging.info(f"✓ Router decision: {result.value}")
     except Exception as e:
-        logging.error(f'route_v2: Failed to parse a valid route. Defaulting to "small_talk". Detail: {e}')
-        result = InputRouter.small_talk
+        logging.error(f'❌ Route parsing failed: {e}')
+        # Get raw output for debugging
+        prompt_llm_chain = chain.first | chain.middle[0]
+        raw_output = prompt_llm_chain.invoke(context)
+        logging.error(f"Raw LLM output: {raw_output}")
+        result = InputRouter.extract  # Default to extract instead of small_talk
+
     state.input_route_result["input_route_decision"] = result.value
-    logging.info(f"Input Route decision: {result.value}")
     state.current_state_flow.append(state.input_state.get("input_state"))
     return state
 
