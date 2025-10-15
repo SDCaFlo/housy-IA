@@ -6,7 +6,6 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from .stages.router_llm import get_route_chain
 from .stages.extract_chain import get_extract_chain
-from .stages.faq_chain import faq_llm_node, faq_retrieve_node
 import json
 import logging
 
@@ -33,7 +32,7 @@ def proccess_chat_turn(
         zip(["input_state", "state_count"], chat_history.retrieve_current_stage())
     )
     input_lead = chat_history.retrieve_current_lead()
-    message_history = chat_history.get_langchain_history()
+    
 
     # Saving user message
     chat_history.add_message(
@@ -48,6 +47,8 @@ def proccess_chat_turn(
         },
     )
 
+    message_history = chat_history.get_langchain_history()
+
     # Workflow Definition
     workflow = StateGraph(MyState)
 
@@ -56,8 +57,8 @@ def proccess_chat_turn(
     workflow.add_node("extract", run_extract)
     workflow.add_node("other", run_other)
     workflow.add_node("small_talk", run_small_talk)
-    workflow.add_node("faq_retrieve", faq_retrieve_node) # <-- implementing
-    workflow.add_node("faq_llm", faq_llm_node) # <-- implementing
+    #workflow.add_node("faq_retrieve", faq_retrieve_node) # <-- implementing
+    #workflow.add_node("faq_llm", faq_llm_node) # <-- implementing
     workflow.add_node("lead_router", run_lead_route)
     workflow.add_node("query_user", run_query_user)
     workflow.add_node("search_properties", run_search_properties)
@@ -76,7 +77,6 @@ def proccess_chat_turn(
             "other": "other", 
             "new_search": "new_search", 
             "small_talk": "small_talk",
-            "faq": "faq_retrieve"
         }
     )
 
@@ -93,8 +93,8 @@ def proccess_chat_turn(
     workflow.add_edge("new_search", "extract")
     workflow.add_edge("other", "format_output")
     workflow.add_edge("small_talk", "format_output")
-    workflow.add_edge("faq_retrieve", "faq_llm")
-    workflow.add_edge("faq_llm", "format_output")
+    #workflow.add_edge("faq_retrieve", "faq_llm")
+    #workflow.add_edge("faq_llm", "format_output")
     workflow.add_edge("query_user", "format_output")
     workflow.add_edge("search_properties", "format_output")
     # workflow.set_finish_point("extract")
@@ -154,28 +154,33 @@ def proccess_chat_turn(
     else:
         return output_stage, output_content
 
-
-################################# Node Function Definition ################################
+###################################################################################################
+################################# Node Function Definition ########################################
+###################################################################################################
 def run_input_route(state: MyState):
     """Input Router w/ EnumOutputParser"""
     logging.info("Routing")
+    chain = get_route_chain()
+    context = {
+        "message_context": str([(x.type, x.content) for x in state.message_history[-3::1]])
+        .replace("),","),\n")
+        .replace("{", "{{")
+        .replace("}", "}}"), # pasamos los últimos 3 mensajes formateados
+    }
     try:
-        result = get_route_chain().invoke(
-            {
-                "input_state": str(state.input_state)
-                .replace("{", "{{")
-                .replace("}", "}}"), # pasamos el input state (reemplazar por flag a futuro)
-                "message_context": str([(x.type, x.content) for x in state.message_history[-3::1]])
-                .replace("),","),\n")
-                .replace("{", "{{")
-                .replace("}", "}}"), # pasamos los últimos 3 mensajes formateados
-            }
-        )
+        # Log the actual prompt
+        logging.info(f"Router context: {context['message_context']}")
+        result = chain.invoke(context)
+        logging.info(f"✓ Router decision: {result.value}")
     except Exception as e:
-        logging.error(f'route_v2: Failed to parse a valid route. Defaulting to "small_talk". Detail: {e}')
-        result = InputRouter.small_talk
+        logging.error(f'❌ Route parsing failed: {e}')
+        # Get raw output for debugging
+        prompt_llm_chain = chain.first | chain.middle[0]
+        raw_output = prompt_llm_chain.invoke(context)
+        logging.error(f"Raw LLM output: {raw_output}")
+        result = InputRouter.extract  # Default to extract instead of small_talk
+
     state.input_route_result["input_route_decision"] = result.value
-    logging.info(f"Input Route decision: {result.value}")
     state.current_state_flow.append(state.input_state.get("input_state"))
     return state
 
@@ -200,6 +205,44 @@ def run_extract(state: MyState):
     return state
 
 
+# def run_verify_location(state: MyState):
+#     """Verify the location in the lead"""
+#     lead: PropertySearchParams = state.extract_result.get("merged_lead")
+#     search_location: str = lead.location.value
+#     validation_status = lead.location.state.value
+
+#     # case 1: if there's no location inside the lead -> Nothing to do here
+#     if search_location == None:
+#         state.location_verification_result["result"] = "skipped: empty value"
+#     # case 2: if there's a location and it's already validated -> Nothing to do here
+#     elif search_location != None and validation_status == "validated":
+#         state.location_verification_result["result"] = "skipped: already validated"
+#     # case 3: if there's a location and it's NOT validated (pending_validation) -> Validate
+#     elif search_location != None and validation_status == "pending_validation":
+#         from app.services.geolocation.location_verifier import verify_location
+
+#         try:
+#             _, coordinates = verify_location(search_location.lower())
+#             lead.location.lat = coordinates.get("lat")
+#             lead.location.lon = coordinates.get("lon")
+#             state.location_verification_result["result"] = (
+#                 "validation process completed"
+#             )
+#         except Exception as e:
+#             state.location_verification_result["result"] = f"error {e}"
+#             lead.location.lat = 999
+#             lead.location.lon = 999
+#             logging.error(f"Found error during location verification: {e}")
+
+#     # case 4: if there's a location and the previous validation failed -> Nothing to do, let the query ask for a new location.
+#     elif search_location != None and validation_status == "validation_failed":
+#         state.location_verification_result["result"] = (
+#             "skipped: previous validation failed. no change."
+#         )
+
+#     return state
+
+
 def run_verify_location(state: MyState):
     """Verify the location in the lead"""
     lead: PropertySearchParams = state.extract_result.get("merged_lead")
@@ -215,26 +258,17 @@ def run_verify_location(state: MyState):
     # case 3: if there's a location and it's NOT validated (pending_validation) -> Validate
     elif search_location != None and validation_status == "pending_validation":
         from app.services.geolocation.location_verifier import verify_location
-
         try:
-            _, coordinates = verify_location(search_location.lower())
-            lead.location.lat = coordinates.get("lat")
-            lead.location.lon = coordinates.get("lon")
-            state.location_verification_result["result"] = (
-                "validation process completed"
-            )
+            _, geometry = verify_location(search_location.lower())
+            lead.location.geom = geometry
+            state.location_verification_result["result"] = "validation process completed"
         except Exception as e:
-            state.location_verification_result["result"] = f"error {e}"
-            lead.location.lat = 999
-            lead.location.lon = 999
-            logging.error(f"Found error during location verification: {e}")
-
+            state.location_verification_result["result"] = "validation Failed"
+            lead.location.geom = [999,]
     # case 4: if there's a location and the previous validation failed -> Nothing to do, let the query ask for a new location.
     elif search_location != None and validation_status == "validation_failed":
-        state.location_verification_result["result"] = (
-            "skipped: previous validation failed. no change."
-        )
-
+        state.location_verification_result["result"] = "skipped: previous validation failed. no change."
+    
     return state
 
 

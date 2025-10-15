@@ -25,4 +25,6 @@ dependencies = [
     "sqlalchemy>=2.0.43", # SQL connector
     "starlette>=0.48.0", # web stuff
     "uvicorn[standard]>=0.35.0", # web runner
+    "geopandas>=1.1.1",
+    "matplotlib>=3.10.6",
 ]
