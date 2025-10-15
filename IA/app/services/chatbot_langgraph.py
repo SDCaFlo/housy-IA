@@ -6,7 +6,6 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from .stages.router_llm import get_route_chain
 from .stages.extract_chain import get_extract_chain
-from .stages.faq_chain import faq_llm_node, faq_retrieve_node
 import json
 import logging
 
@@ -33,7 +32,7 @@ def proccess_chat_turn(
         zip(["input_state", "state_count"], chat_history.retrieve_current_stage())
     )
     input_lead = chat_history.retrieve_current_lead()
-    message_history = chat_history.get_langchain_history()
+    
 
     # Saving user message
     chat_history.add_message(
@@ -48,6 +47,8 @@ def proccess_chat_turn(
         },
     )
 
+    message_history = chat_history.get_langchain_history()
+
     # Workflow Definition
     workflow = StateGraph(MyState)
 
@@ -56,8 +57,8 @@ def proccess_chat_turn(
     workflow.add_node("extract", run_extract)
     workflow.add_node("other", run_other)
     workflow.add_node("small_talk", run_small_talk)
-    workflow.add_node("faq_retrieve", faq_retrieve_node) # <-- implementing
-    workflow.add_node("faq_llm", faq_llm_node) # <-- implementing
+    #workflow.add_node("faq_retrieve", faq_retrieve_node) # <-- implementing
+    #workflow.add_node("faq_llm", faq_llm_node) # <-- implementing
     workflow.add_node("lead_router", run_lead_route)
     workflow.add_node("query_user", run_query_user)
     workflow.add_node("search_properties", run_search_properties)
@@ -76,7 +77,6 @@ def proccess_chat_turn(
             "other": "other", 
             "new_search": "new_search", 
             "small_talk": "small_talk",
-            "faq": "faq_retrieve"
         }
     )
 
@@ -93,8 +93,8 @@ def proccess_chat_turn(
     workflow.add_edge("new_search", "extract")
     workflow.add_edge("other", "format_output")
     workflow.add_edge("small_talk", "format_output")
-    workflow.add_edge("faq_retrieve", "faq_llm")
-    workflow.add_edge("faq_llm", "format_output")
+    #workflow.add_edge("faq_retrieve", "faq_llm")
+    #workflow.add_edge("faq_llm", "format_output")
     workflow.add_edge("query_user", "format_output")
     workflow.add_edge("search_properties", "format_output")
     # workflow.set_finish_point("extract")

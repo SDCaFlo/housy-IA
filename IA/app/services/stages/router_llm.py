@@ -4,7 +4,29 @@ from app.models.ChatState import InputRouter, route_descriptions
 from app.core.config import ROUTER_MODEL_ID
 from app.models.LLM_prompts import ROUTER_PROMPT, ROUTER_PROMPT_v5
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
-from langchain.output_parsers import EnumOutputParser
+from langchain_core.output_parsers import BaseOutputParser
+import logging
+
+
+class RobustEnumParser(BaseOutputParser[InputRouter]):
+    """Parser que extrae el enum incluso si hay texto adicional"""
+    
+    def parse(self, text: str) -> InputRouter:
+        # Limpia el texto
+        text_lower = text.strip().lower()
+        
+        # Busca cada posible valor
+        for route in InputRouter:
+            if route.value in text_lower:
+                # Verifica que sea una palabra completa, no parte de otra
+                if f" {route.value} " in f" {text_lower} " or \
+                   text_lower.startswith(route.value) or \
+                   text_lower.endswith(route.value):
+                    return route
+        
+        # Default
+        logging.warning(f"No se encontró ruta válida en: {text}. Usando extract por defecto.")
+        return InputRouter.extract
 
 
 class LlmRouter:
@@ -58,7 +80,7 @@ class LlmRouter:
         return {"history": self.message_history, "input": self.new_message}
 
 def get_route_chain():
-    parser = EnumOutputParser(enum=InputRouter)
+    parser = RobustEnumParser()
     
     formatted_descriptions = "\n\n".join(
         f"{route.value}:\n{desc.strip()}" 
@@ -69,13 +91,12 @@ def get_route_chain():
         template=ROUTER_PROMPT_v5,
         input_variables=["message_context"],
         partial_variables={
-            "route_descriptions": formatted_descriptions,
-            "format_instructions": parser.get_format_instructions()
+            "route_descriptions": formatted_descriptions
         },
     )
 
     llm = get_langchain_bedrock_client(
-        model_id=ROUTER_MODEL_ID, temperature=0.1, max_tokens=50
+        model_id=ROUTER_MODEL_ID, temperature=0.0, max_tokens=50
     )
 
     return prompt | llm | parser

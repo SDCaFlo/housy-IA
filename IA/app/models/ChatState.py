@@ -12,7 +12,7 @@ class InputRouter(str, Enum):
     new_search = "new_search"
     other = "other"
     small_talk = "small_talk"
-    faq = "faq"
+    #faq = "faq"
 
 # class InputRouterDescription(str, Enum):
 #     extract = Field("extract", description="Para análisis, extracción y/o procesamiento de información específica. Si el cliente se encuentra aportando información o confirmandola.")
@@ -43,11 +43,11 @@ route_descriptions = {
     - NO usar si hay contexto de búsqueda activa
     """,
     
-    InputRouter.faq: """faq:
-    - Preguntas sobre el servicio: "¿qué zonas cubren?", "¿cómo funciona?", "¿cobran comisión?"
-    - Preguntas sobre capacidades del bot
-    - Consultas sobre proceso o políticas
-    """,
+    # InputRouter.faq: """faq:
+    # - Preguntas sobre el servicio: "¿qué zonas cubren?", "¿cómo funciona?", "¿cobran comisión?"
+    # - Preguntas sobre capacidades del bot
+    # - Consultas sobre proceso o políticas
+    # """,
     
     InputRouter.other: """other:
     - Temas COMPLETAMENTE fuera del dominio inmobiliario

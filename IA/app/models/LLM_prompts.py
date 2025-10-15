@@ -60,7 +60,7 @@ REGLAS ESPECIALES:
 {format_instructions}
 """
 
-ROUTER_PROMPT_v5 = """Eres un clasificador de intenciones para un chatbot de recomendación de propiedades inmobiliarias.
+ROUTER_PROMPT_v5 =  """Eres un clasificador de intenciones para un chatbot de recomendación de propiedades inmobiliarias.
 Analiza el mensaje del usuario y el contexto conversacional para determinar la ruta correcta.
 
 CONTEXTO CONVERSACIONAL:
@@ -70,18 +70,21 @@ RUTAS DISPONIBLES Y SUS DESCRIPCIONES:
 {route_descriptions}
 
 REGLAS ESPECIALES:
-- Si hay contexto de pregunta previa, "ok"/"sí" puede ser extract o new_search según el contexto
+- Si hay contexto de pregunta previa, "ok"/"sí" puede ser extract según el contexto
 - Prioriza el contexto conversacional sobre el mensaje aislado
 - "extract" es para cuando el usuario proporciona datos específicos (presupuesto, ubicación, características)
 - "new_search" es SOLO cuando explícitamente dice querer empezar de nuevo
 - "small_talk" es SOLO para saludos, despedidas, cortesías sin intención inmobiliaria
-- "faq" es para preguntas sobre el servicio mismo
 - "other" es SOLO para temas completamente fuera del dominio inmobiliario
 - En caso de duda, prefiere "extract" sobre "other"
 
-{format_instructions}
+IMPORTANTE: Responde ÚNICAMENTE con UNA de estas palabras exactas, sin explicación adicional:
+extract
+new_search
+small_talk
+other
 
-Responde ÚNICAMENTE con el nombre de la ruta (extract, new_search, small_talk, faq, o other):"""
+Tu respuesta debe ser una sola línea con una sola palabra."""
 
 
 ROUTER_PROMPT = """
