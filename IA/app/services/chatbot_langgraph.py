@@ -4,14 +4,11 @@ from app.models.ChatState import MyState, ContentTypeMapping, InputRouter
 from typing import List
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
-from app.services.stages.router_llm import get_route_chain, get_route_chain_v2
-from app.services.stages.extract_chain import get_extract_chain
+from .stages.router_llm import get_route_chain
+from .stages.extract_chain import get_extract_chain
 import json
 import logging
 
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 def proccess_chat_turn(
@@ -25,6 +22,7 @@ def proccess_chat_turn(
     # 1. Recuperar los mensajes históricos.
     # Necesitamos los siguientes datos para nuestro planner:
     # previous_state + message_history + entities .
+    logging.info("Test logger")
 
     chat_history = ChatHistory(user_id, conv_id)
     chat_history.get_messages(
@@ -34,7 +32,7 @@ def proccess_chat_turn(
         zip(["input_state", "state_count"], chat_history.retrieve_current_stage())
     )
     input_lead = chat_history.retrieve_current_lead()
-    message_history = chat_history.get_langchain_history()
+    
 
     # Saving user message
     chat_history.add_message(
@@ -49,13 +47,18 @@ def proccess_chat_turn(
         },
     )
 
+    message_history = chat_history.get_langchain_history()
+
     # Workflow Definition
     workflow = StateGraph(MyState)
 
     # Node Creation
-    workflow.add_node("input_router", run_input_route_v2)  # Testing
+    workflow.add_node("input_router", run_input_route) # <-- Needs Modification
     workflow.add_node("extract", run_extract)
     workflow.add_node("other", run_other)
+    workflow.add_node("small_talk", run_small_talk)
+    #workflow.add_node("faq_retrieve", faq_retrieve_node) # <-- implementing
+    #workflow.add_node("faq_llm", faq_llm_node) # <-- implementing
     workflow.add_node("lead_router", run_lead_route)
     workflow.add_node("query_user", run_query_user)
     workflow.add_node("search_properties", run_search_properties)
@@ -69,7 +72,12 @@ def proccess_chat_turn(
         lambda x: x.input_route_result[
             "input_route_decision"
         ],  # función que retorna el nombre del siguiente nodo
-        {"extract": "extract", "other": "other", "new_search": "new_search"},
+        {
+            "extract": "extract", 
+            "other": "other", 
+            "new_search": "new_search", 
+            "small_talk": "small_talk",
+        }
     )
 
     workflow.add_conditional_edges(
@@ -84,6 +92,9 @@ def proccess_chat_turn(
     workflow.add_edge("verify_location", "lead_router")
     workflow.add_edge("new_search", "extract")
     workflow.add_edge("other", "format_output")
+    workflow.add_edge("small_talk", "format_output")
+    #workflow.add_edge("faq_retrieve", "faq_llm")
+    #workflow.add_edge("faq_llm", "format_output")
     workflow.add_edge("query_user", "format_output")
     workflow.add_edge("search_properties", "format_output")
     # workflow.set_finish_point("extract")
@@ -143,47 +154,32 @@ def proccess_chat_turn(
     else:
         return output_stage, output_content
 
-
-################################# Node Function Definition ################################
+###################################################################################################
+################################# Node Function Definition ########################################
+###################################################################################################
 def run_input_route(state: MyState):
-    """Input Router"""
-    logger.info("Routing")
-    result = get_route_chain().invoke(
-        {
-            "entities": str(json.dumps(state.input_lead.model_dump()))
-            .replace("{", "{{")
-            .replace("}", "}}"),
-            "input_state": str(state.input_state).replace("{", "{{").replace("}", "}}"),
-            "input": state.user_message,
-            "message_history": state.message_history,
-        }
-    )
-    state.input_route_result["llm_raw_output"] = result
-    state.input_route_result["input_route_decision"] = result.model_dump().get(
-        "content", "error"
-    )
-    state.current_state_flow.append(state.input_state.get("input_state"))
-    return state
-
-
-def run_input_route_v2(state: MyState):
     """Input Router w/ EnumOutputParser"""
-    logger.info("Routing")
+    logging.info("Routing")
+    chain = get_route_chain()
+    context = {
+        "message_context": str([(x.type, x.content) for x in state.message_history[-3::1]])
+        .replace("),","),\n")
+        .replace("{", "{{")
+        .replace("}", "}}"), # pasamos los últimos 3 mensajes formateados
+    }
     try:
-        result = get_route_chain_v2().invoke(
-            {
-                "entities": str(json.dumps(state.input_lead.model_dump()))
-                .replace("{", "{{")
-                .replace("}", "}}"),
-                "input_state": str(state.input_state)
-                .replace("{", "{{")
-                .replace("}", "}}"),
-                "user_message": state.user_message,
-            }
-        )
-    except Exception:
-        logger.error('route_v2: Failed to parse a valid route. Defaulting to "extract"')
-        result = InputRouter.extract
+        # Log the actual prompt
+        logging.info(f"Router context: {context['message_context']}")
+        result = chain.invoke(context)
+        logging.info(f"✓ Router decision: {result.value}")
+    except Exception as e:
+        logging.error(f'❌ Route parsing failed: {e}')
+        # Get raw output for debugging
+        prompt_llm_chain = chain.first | chain.middle[0]
+        raw_output = prompt_llm_chain.invoke(context)
+        logging.error(f"Raw LLM output: {raw_output}")
+        result = InputRouter.extract  # Default to extract instead of small_talk
+
     state.input_route_result["input_route_decision"] = result.value
     state.current_state_flow.append(state.input_state.get("input_state"))
     return state
@@ -209,6 +205,44 @@ def run_extract(state: MyState):
     return state
 
 
+# def run_verify_location(state: MyState):
+#     """Verify the location in the lead"""
+#     lead: PropertySearchParams = state.extract_result.get("merged_lead")
+#     search_location: str = lead.location.value
+#     validation_status = lead.location.state.value
+
+#     # case 1: if there's no location inside the lead -> Nothing to do here
+#     if search_location == None:
+#         state.location_verification_result["result"] = "skipped: empty value"
+#     # case 2: if there's a location and it's already validated -> Nothing to do here
+#     elif search_location != None and validation_status == "validated":
+#         state.location_verification_result["result"] = "skipped: already validated"
+#     # case 3: if there's a location and it's NOT validated (pending_validation) -> Validate
+#     elif search_location != None and validation_status == "pending_validation":
+#         from app.services.geolocation.location_verifier import verify_location
+
+#         try:
+#             _, coordinates = verify_location(search_location.lower())
+#             lead.location.lat = coordinates.get("lat")
+#             lead.location.lon = coordinates.get("lon")
+#             state.location_verification_result["result"] = (
+#                 "validation process completed"
+#             )
+#         except Exception as e:
+#             state.location_verification_result["result"] = f"error {e}"
+#             lead.location.lat = 999
+#             lead.location.lon = 999
+#             logging.error(f"Found error during location verification: {e}")
+
+#     # case 4: if there's a location and the previous validation failed -> Nothing to do, let the query ask for a new location.
+#     elif search_location != None and validation_status == "validation_failed":
+#         state.location_verification_result["result"] = (
+#             "skipped: previous validation failed. no change."
+#         )
+
+#     return state
+
+
 def run_verify_location(state: MyState):
     """Verify the location in the lead"""
     lead: PropertySearchParams = state.extract_result.get("merged_lead")
@@ -224,26 +258,17 @@ def run_verify_location(state: MyState):
     # case 3: if there's a location and it's NOT validated (pending_validation) -> Validate
     elif search_location != None and validation_status == "pending_validation":
         from app.services.geolocation.location_verifier import verify_location
-
         try:
-            _, coordinates = verify_location(search_location.lower())
-            lead.location.lat = coordinates.get("lat")
-            lead.location.lon = coordinates.get("lon")
-            state.location_verification_result["result"] = (
-                "validation process completed"
-            )
+            _, geometry = verify_location(search_location.lower())
+            lead.location.geom = geometry
+            state.location_verification_result["result"] = "validation process completed"
         except Exception as e:
-            state.location_verification_result["result"] = f"error {e}"
-            lead.location.lat = 999
-            lead.location.lon = 999
-            logger.error(f"Found error during location verification: {e}")
-
+            state.location_verification_result["result"] = "validation Failed"
+            lead.location.geom = [999,]
     # case 4: if there's a location and the previous validation failed -> Nothing to do, let the query ask for a new location.
     elif search_location != None and validation_status == "validation_failed":
-        state.location_verification_result["result"] = (
-            "skipped: previous validation failed. no change."
-        )
-
+        state.location_verification_result["result"] = "skipped: previous validation failed. no change."
+    
     return state
 
 
@@ -295,19 +320,49 @@ def run_query_user(state: MyState):
     return state
 
 
+def run_small_talk(state: MyState):
+    """Call LLM and formulates questions for user"""
+    logging.info("Entered route: small_talk")
+    from app.services.stages.small_talk import get_small_talk_chain
+    
+    # 1. Historial
+    chat_history: List[BaseMessage] = state.message_history[-4::]  # para contexto
+
+
+    # 2. Obtenemos cadena.
+    chain = get_small_talk_chain()
+
+    logging.info("Invocando cadena small_talk")
+    # 3. Invocamos cadena.
+    result = chain.invoke(
+        {
+            "message_history": chat_history,
+            "input": state.user_message,
+        }
+    )
+    logging.info("Succeeded invoking small_talk chain")
+
+    state.small_talk_result["llm_raw_output"] = result
+    state.small_talk_result["small_talk_output"] = result.model_dump().get(
+        "content", "error"
+    )
+    state.current_state_flow.append("small_talk")
+    return state
+
+
 def run_search_properties(state: MyState) -> list:
     """Searches properties"""
     from app.services.embeddings.search_opensearch import search_similar_properties
 
     try:
-        logger.info("property_search: Starting")
+        logging.info("property_search: Starting")
         query = state.extract_result["merged_lead"].to_opensearch_query(
             query_size=5, max_distance=15
         )
         recommendations = search_similar_properties(query)
         state.search_properties_result = recommendations
     except Exception as e:
-        logger.error(f"property_search: Failed. Detail: {e}")
+        logging.error(f"property_search: Failed. Detail: {e}")
         state.search_properties_result = [
             "error",
         ]
@@ -325,29 +380,37 @@ def run_other(state: MyState):
 
 def run_format_output(state: MyState):
     """Formats final output"""
+    try:
+        logging.info("Entered Node: 'format_output'")
+        final_state = state.current_state_flow[-1]
+        content_type = getattr(ContentTypeMapping, final_state).value
+        # final_state_response
+        final_state_response = getattr(state, final_state + "_result")
+        match final_state:
+            case "other":
+                content = {"text": final_state_response}  # str
+            case "query_user":
+                content = {"text": final_state_response.get("user_query_output")}  # str
+            case "search_properties":
+                content = {"properties": final_state_response}  # list of properties
+            case "small_talk":
+                content = {"text": final_state_response.get("small_talk_output")} # str
+            case "faq_llm":
+                content = {"text": final_state_response.get("faq_llm_output")}
+        lead: PropertySearchParams = getattr(state, "extract_result", {}).get(
+            "merged_lead", PropertySearchParams()
+        )
 
-    final_state = state.current_state_flow[-1]
-    content_type = getattr(ContentTypeMapping, final_state).value
-    # final_state_response
-    final_state_response = getattr(state, final_state + "_result")
-    match final_state:
-        case "other":
-            content = {"text": final_state_response}  # str
-        case "query_user":
-            content = {"text": final_state_response.get("user_query_output")}  # str
-        case "search_properties":
-            content = {"properties": final_state_response}  # list of properties
-    lead: PropertySearchParams = getattr(state, "extract_result", {}).get(
-        "merged_lead", PropertySearchParams()
-    )
+        final_output = {
+            "final_state": final_state,
+            "content_type": content_type,
+            "content": content,
+            "lead": json.dumps(lead.model_dump()),
+        }
 
-    final_output = {
-        "final_state": final_state,
-        "content_type": content_type,
-        "content": content,
-        "lead": json.dumps(lead.model_dump()),
-    }
+        state.final_output = final_output
 
-    state.final_output = final_output
-
-    return state
+        return state
+    except Exception as e:
+        logging.info(f"format output chain error: {e}")
+        return state

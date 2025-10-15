@@ -1,8 +1,9 @@
 # codigo para manejo de clientes de aws.
 import os
 import boto3
-from app.core.config import AWS_REGION
+from app.core.config import AWS_REGION, EMBED_MODEL_ID
 from mypy_boto3_bedrock_runtime import BedrockRuntimeClient
+from langchain_aws import BedrockEmbeddings
 
 
 def get_boto3_session():
@@ -71,3 +72,14 @@ def get_langchain_bedrock_client(
         top_p=top_p,
     )
     return chat
+
+
+def get_langchain_embed_client():
+    """Embedding service with langchain"""
+    client = get_bedrock_client()
+    embedding = BedrockEmbeddings(
+        client = client,
+        region_name=AWS_REGION,
+        model_id=EMBED_MODEL_ID
+    )
+    return embedding

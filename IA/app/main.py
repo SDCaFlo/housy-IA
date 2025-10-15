@@ -3,6 +3,12 @@ from app.api.chatbot_endpoint import router
 from app.api.chatbot_recovery import router as chat_router
 from app.api.embed_endpoint import router as embed_router
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,  # or DEBUG for more verbosity
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 app = FastAPI(
     title="Chatbot API",
